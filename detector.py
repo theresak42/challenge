@@ -128,17 +128,19 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     values = np.abs(signal[::1000])
     values_per_second = sample_rate / 1000
 
-    h = 1
+    values, values_per_second = LFSF(sample_rate, signal, fps)
+    """h = 1
     x_t = np.log10(1+10*magspect)
-    #print(x_t.shape)
+    print(x_t.shape)
     sd_t = x_t[:, h:] - x_t[:, :int(x_t.shape[1])-h]
-    #print(sd_t.shape)
+    print(sd_t.shape)
     hw_t = np.maximum(0,sd_t)**2
-    #print(hw_t.shape)
+    print(hw_t.shape)
     dSD_t = np.sum(hw_t, axis=0)
 
+    values = dSD_t
     values_per_second = fps
-
+"""
     #print(dSD_t.shape)
     
 
@@ -154,7 +156,39 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
 
     #input()
 
-    return dSD_t, values_per_second
+    return values, values_per_second
+
+
+def LFSF(sample_rate, signal, fps, window_size=23, hop_size=10):
+    """
+    Onset detection using the LogFiltSpectFlux algorithm.
+    """
+    X_k = librosa.stft(
+            signal, hop_length=hop_size, win_length=window_size, window='hann', n_fft=2048)
+    
+    # apply filterbank
+    #F_k, _ = librosa.filters.semitone_filterbank(
+    #    center_freqs=librosa.midi_to_hz(np.arange(60, 72)), # welche parameter hier????????
+    #    sample_rates=np.repeat(sample_rate, 12))
+    """center_freqs = librosa.fft_frequencies(sr=sample_rate, n_fft=2048)  # Shape: (n_fft // 2 + 1,)
+    sample_rates = sample_rate  # Scalar sample rate
+
+    fbanks = librosa.filters.semitone_filterbank(center_freqs=center_freqs, sample_rates=sample_rates)
+    print(f"fbanks shape: {len(fbanks)} and {len(fbanks[0])}, {fbanks[0]}")
+    filtered_spec = fbanks @ np.abs(X_k)  # Shape: (n_semitone_bins, n_frames)
+
+    print(f"filtered_spec shape: {filtered_spec.shape}")
+"""
+    #print(f"Start F_k: {F_k}\nEnd F_k")
+    print(X_k.shape)
+    print(len(F_k))
+    print(len(F_k[0]))
+    print(F_k[0])
+    magspect = np.abs(X_k)*F_k
+
+
+
+    return
 
 
 def detect_onsets(odf_rate, odf, options):
@@ -181,7 +215,7 @@ def detect_onsets(odf_rate, odf, options):
 
     strongest_indices = np.array(strongest_indices)
     print(strongest_indices/odf_rate, len(strongest_indices))
-    input()
+    #input()
 
     return strongest_indices / odf_rate
 
