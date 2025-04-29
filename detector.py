@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 from scipy.io import wavfile
+from scipy.signal import find_peaks, find_peaks_cwt
 
 import librosa
 try:
@@ -115,6 +116,15 @@ def detect_everything(filename, options):
             'tempo': list(np.round(tempo, 2))}
 
 
+def smoothing(values, window=3):
+
+    mean_window = np.ones(window) / window
+    values = np.pad(values, pad_width=int(window-2), mode="constant", constant_values=0)
+    ma = np.convolve(values, mean_window, mode='valid')
+    return ma
+    
+
+
 def onset_detection_function(sample_rate, signal, fps, spect, magspect,
                              melspect, options):
     """
@@ -142,17 +152,7 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     #print(dSD_t.shape)
     
 
-    """plt.figure(figsize=(10, 4))
-    plt.plot(dSD_t, color='dodgerblue', linewidth=2)
-    plt.title("Onset Strength Over Time")
-    plt.xlabel("Time Frame (t)")
-    plt.ylabel("Strength")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig("pic.png")
-    plt.close()"""
-
-    #input()
+    
 
     return dSD_t, values_per_second
 
@@ -169,19 +169,44 @@ def detect_onsets(odf_rate, odf, options):
     strongest_indices.sort()
 
     norm_odf = (odf - np.min(odf)) / (np.max(odf) - np.min(odf))
+    #print(type(norm_odf), norm_odf.shape)
+    norm_odf_smooth = smoothing(norm_odf, window=5)
+    #print(type(norm_odf_smooth), norm_odf_smooth.shape)
     #TODO: use smoothing function/ DC removal
+    t = "F"
+    if t=="T":
+        plt.figure(figsize=(10, 4))
+        plt.plot(norm_odf_smooth, color='dodgerblue', linewidth=2)
+        plt.title("Onset Strength Over Time")
+        plt.xlabel("Time Frame (t)")
+        plt.ylabel("Strength")
+        plt.grid(True)
+        plt.tight_layout()
+        #plt.savefig("pic.png")
+        plt.show()
+    #plt.close()
+
+    #input()
 
     #implement custom peak picking
 
-    threshold = 0.15
+    threshold = 0.05
     strongest_indices = []
-    for i, (prev, curr, nex) in enumerate(zip(norm_odf[:len(norm_odf-2)],norm_odf[1:len(norm_odf-1)],norm_odf[2:])):
+    for i, (prev, curr, nex) in enumerate(zip(norm_odf_smooth[:len(norm_odf-2)],norm_odf_smooth[1:len(norm_odf_smooth-1)],norm_odf[2:])):
         if curr > prev and curr > nex and curr > threshold:
             strongest_indices.append(i+1)
 
-    strongest_indices = np.array(strongest_indices)
-    print(strongest_indices/odf_rate, len(strongest_indices))
-    input()
+    
+    #strongest_indices = find_peaks(norm_odf_smooth, distance = 10)[0]
+    strongest_indices = find_peaks_cwt(norm_odf, widths=1)
+    #print(norm_odf_smooth)
+
+    #strongest_indices += 1
+    #print(strongest_indices)
+    
+    #print(strongest_indices/odf_rate, len(strongest_indices))
+    #input()
+
 
     return strongest_indices / odf_rate
 
@@ -226,11 +251,12 @@ def main():
     for filename in infiles:
         results[filename.stem] = detect_everything(filename, options)
 
-    # write output file
-    #with open(options.outfile, 'w') as f:
-        #json.dump(results, f)
+    #write output file
+    with open(options.outfile, 'w') as f:
+        json.dump(results, f)
 
 
 if __name__ == "__main__":
     main()
+    
 

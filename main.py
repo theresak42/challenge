@@ -5,7 +5,7 @@ from train import train
 
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
-from torch.nn import BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 
 def main(indir):
@@ -32,7 +32,7 @@ def main(indir):
 
     optimizer = AdamW(model.parameters(), lr = 0.0001)
 
-    loss_fn = BCEWithLogitsLoss()
+    loss_fn = CrossEntropyLoss()
 
 
     train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device)
