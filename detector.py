@@ -16,6 +16,7 @@ import json
 import matplotlib.pyplot as plt
 
 import numpy as np
+import scipy
 from scipy.io import wavfile
 
 import librosa
@@ -110,6 +111,9 @@ def detect_everything(filename, options):
             axes[2].axvline(position, color='tab:red')
         plt.show()
 
+        #from utils import vis
+        #vis([onsets], [signal])
+
     return {'onsets': list(np.round(onsets, 3)),
             'beats': list(np.round(beats, 3)),
             'tempo': list(np.round(tempo, 2))}
@@ -128,7 +132,7 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     values = np.abs(signal[::1000])
     values_per_second = sample_rate / 1000
 
-    values, values_per_second = LFSF(sample_rate, signal, fps)
+    values, values_per_second = LFSF(sample_rate, signal, fps, spect, magspect, melspect)
     """h = 1
     x_t = np.log10(1+10*magspect)
     print(x_t.shape)
@@ -159,36 +163,36 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     return values, values_per_second
 
 
-def LFSF(sample_rate, signal, fps, window_size=23, hop_size=10):
+def LFSF(sample_rate, signal, fps, spect, magspect, melspect, window_size=23, hop_size=10, lam=1, n_fft=2048):
     """
     Onset detection using the LogFiltSpectFlux algorithm.
     """
-    X_k = librosa.stft(
-            signal, hop_length=hop_size, win_length=window_size, window='hann', n_fft=2048)
     
-    # apply filterbank
-    #F_k, _ = librosa.filters.semitone_filterbank(
-    #    center_freqs=librosa.midi_to_hz(np.arange(60, 72)), # welche parameter hier????????
-    #    sample_rates=np.repeat(sample_rate, 12))
-    """center_freqs = librosa.fft_frequencies(sr=sample_rate, n_fft=2048)  # Shape: (n_fft // 2 + 1,)
-    sample_rates = sample_rate  # Scalar sample rate
+    """
+    X_k = librosa.stft(
+            signal, hop_length=hop_size, win_length=window_size, window='hann', n_fft=n_fft)
+    
+    magnitudes=[]
+    semitone_filterbank, sample_rates = librosa.filters.semitone_filterbank()
+    for cur_sr, cur_filter in zip(sample_rates, semitone_filterbank):
+        w, h = scipy.signal.sosfreqz(cur_filter,fs=cur_sr, worN=n_fft/2+1)
+        print(w,h)
+        magnitudes.append(20 * np.log10(1+lam*np.abs(h)))
+    magnitudes = np.array(magnitudes)
+    print(magnitudes.shape)
+    magspect = np.dot(np.abs(X_k), magnitudes)
+    """
 
-    fbanks = librosa.filters.semitone_filterbank(center_freqs=center_freqs, sample_rates=sample_rates)
-    print(f"fbanks shape: {len(fbanks)} and {len(fbanks[0])}, {fbanks[0]}")
-    filtered_spec = fbanks @ np.abs(X_k)  # Shape: (n_semitone_bins, n_frames)
+    h = 1
+    X_t = np.log10(1+10*magspect)
+    #print(f"X_t: {X_t[0]}")
+    distances = X_t[:, h:] - X_t[:, :int(X_t.shape[1])-h]
+    #print(f"distances: {distances[0]}")
+    values = np.sum(np.maximum(distances, 0), axis=0)
+    print(values[:10])
+    #print(f"\nreturn values shapes: {values.shape}, fps={fps}")
 
-    print(f"filtered_spec shape: {filtered_spec.shape}")
-"""
-    #print(f"Start F_k: {F_k}\nEnd F_k")
-    print(X_k.shape)
-    print(len(F_k))
-    print(len(F_k[0]))
-    print(F_k[0])
-    magspect = np.abs(X_k)*F_k
-
-
-
-    return
+    return values, fps
 
 
 def detect_onsets(odf_rate, odf, options):

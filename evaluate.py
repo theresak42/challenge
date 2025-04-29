@@ -111,6 +111,7 @@ def main():
     # read predictions
     preds = read_data(options.predictions, extension='.pr')
 
+
     # evaluate
     try:
         print('Onsets F-score: %.4f' % eval_onsets(truth, preds))
@@ -124,6 +125,10 @@ def main():
         print('Beats F-score: %.4f' % eval_beats(truth, preds))
     except KeyError:
         print('Beats seemingly not included.')
+
+        
+    from utils import vis
+    vis(preds, truth)
 
 
 if __name__ == "__main__":
