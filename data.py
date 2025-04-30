@@ -73,24 +73,31 @@ def load_data(indir, methode = "onsets", train=True, use_extra = True, fps=70):
     indir = Path(indir)
     #print(indir)
     if train:
-        if not use_extra:
-            indir = Path(os.path.join(indir,"train"))
-        in_audio_files = list(indir.glob('*.wav'))
-        #print(len(in_audio_files))
         match methode:
             case "onsets":
                 suffix = ".onsets.gt"
+                extra_dir = "train_extra_onsets"
             case "beats":
                 suffix = ".beats.gt"
+                extra_dir = "train_extra_tempobeats"
             case "tempo":
                 suffix = ".tempo.gt"
+                extra_dir = "train_extra_tempobeats"
             case _:
                 raise KeyError("Needs to be one of: onsets, beats, tempo")
+
+        new_indir = Path(os.path.join(indir,"train"))
+        in_audio_files = list(new_indir.glob('*.wav'))    
+        if use_extra:
+            new_indir = Path(os.path.join(indir,extra_dir))
+            in_audio_files += list(new_indir.glob('*.wav'))   
+
+        
             
         infiles = tqdm.tqdm(in_audio_files, desc='File')
         data, labels = [], []
         for filename in infiles:
-            melspec, sr, hoplength = preprocess_audio(filename, fps)
+            melspec, sr,hoplength = preprocess_audio(filename, fps)
             #print(melspec.shape)
             data.append(melspec)
             label_filename = Path(filename).with_suffix(suffix)
@@ -98,7 +105,7 @@ def load_data(indir, methode = "onsets", train=True, use_extra = True, fps=70):
             #print(len(preproc_labels))
             labels.append(preproc_labels)
             
-        return data, labels
+        return data, labels, sr, hoplength
 
     else:
         indir = Path(os.path.join(indir,"test"))

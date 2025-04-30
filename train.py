@@ -1,21 +1,11 @@
 import tqdm
 import torch
 import os
-import matplotlib.pyplot as plt
+
 import numpy as np
+from utils import vis
 
-def vis(pred, truths):
-    for p, tru in zip(pred, truths):
-        print(sum(tru))
-        plt.figure(figsize=(12,4))
-        plt.plot(np.arange(0, len(p), 1) , np.maximum(0, p))
-        for j, t in enumerate(tru):
-            if t != 0:
-                #plt.axvline(j, color='red', linestyle='-')
-                pass
-        plt.show()
 
-        input()
 
 
 
@@ -66,10 +56,12 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs, save_mod
             eval_loss = evaluate(model, test_loader, loss_fn, device=device)
             if save_model and eval_loss<best_loss:
                 best_loss = eval_loss
-                torch.save(model.state_dict(), os.path.join('trained_models', model_name + f'_{epoch + 1}.pt'))
+                torch.save(model.state_dict(), os.path.join('trained_models', model_name + '.pt'))
+                
 
         if scheduler:
             scheduler.step()
+    
     evaluate(model, test_loader, loss_fn, device=device, visualize = True)
 
     pass

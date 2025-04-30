@@ -10,11 +10,13 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 def main(indir):
     data_split = 0.8
+    fps =70
 
-    data, labels = load_data(indir, use_extra=False)
+    data, labels, sr, hoplength = load_data(indir, use_extra=True, fps=fps)
     print("Data loaded")
 
     len_data = int(len(data)*data_split)
+    complete_dataset = AudioDataset(data, labels)
     train_dataset = AudioDataset(data[:len_data], labels[:len_data])
     val_dataset = AudioDataset(data[len_data:], labels[len_data:])
 
@@ -28,15 +30,18 @@ def main(indir):
 
     model = CNN_model().to(device)
 
-    num_epochs = 10
+    num_epochs = 20
 
     optimizer = AdamW(model.parameters(), lr = 0.0001)
 
-    loss_fn = CrossEntropyLoss()
+    loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor([30.0]).to(device))
 
 
-    train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device)
+    #train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device, save_model=True, model_name="friedrich")
 
+
+    f1 = eval(r"C:\Users\Jakob S\AI-Studium\6 Semester\Audio_and_Music_Processing\challenge\trained_models\friedrich.pt",complete_dataset,fps,sr,hoplength, device )
+    print(f1)
     
 
 

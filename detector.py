@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import find_peaks, find_peaks_cwt
+from utils import smoothing
 
 import librosa
 try:
@@ -116,12 +117,7 @@ def detect_everything(filename, options):
             'tempo': list(np.round(tempo, 2))}
 
 
-def smoothing(values, window=3):
 
-    mean_window = np.ones(window) / window
-    values = np.pad(values, pad_width=int(window-2), mode="constant", constant_values=0)
-    ma = np.convolve(values, mean_window, mode='valid')
-    return ma
     
 
 
@@ -165,8 +161,8 @@ def detect_onsets(odf_rate, odf, options):
     # we only have a dumb dummy implementation here.
     # it returns the timestamps of the 100 strongest values.
     # this is not a useful solution at all, just a placeholder.
-    strongest_indices = np.argpartition(odf, 100)[:100]
-    strongest_indices.sort()
+    #strongest_indices = np.argpartition(odf, 100)[:100]
+    #strongest_indices.sort()
 
     norm_odf = (odf - np.min(odf)) / (np.max(odf) - np.min(odf))
     #print(type(norm_odf), norm_odf.shape)

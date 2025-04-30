@@ -8,16 +8,19 @@ class CNN_model(nn.Module):
             nn.Conv2d(1,32,kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.GELU(),
-            nn.MaxPool2d(kernel_size=(4,1)),
+            nn.MaxPool2d(kernel_size=(2,1)),
 
             nn.Conv2d(32,64,kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.GELU(),
             nn.MaxPool2d(kernel_size=(4,1)),
 
-            
+            nn.Conv2d(64,128,kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.GELU(),
+            nn.MaxPool2d(kernel_size=(2,1)),
 
-            nn.Conv2d(64,1,kernel_size=(5,1), padding=(0,0))
+            nn.Conv2d(128,1,kernel_size=(5,1), padding=(0,0))
         )
         """nn.Conv2d(64,128,kernel_size=3, padding=1),
             nn.GELU(),
