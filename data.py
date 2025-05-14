@@ -113,8 +113,10 @@ def load_data(indir, methode = "onsets", train=True, use_extra = True, fps=70):
         infiles = tqdm.tqdm(in_audio_files, desc='File')
         data= []
         for filename in infiles:
-            data.append(preprocess_audio(filename))
-        return data
+            melspec, sr,hoplength = preprocess_audio(filename, fps)
+            data.append((melspec,filename))
+
+        return data, sr, hoplength
 
 #TODO: align files to labels
 #TODO: dont need audio files if we dont have labels for it

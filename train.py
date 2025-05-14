@@ -62,6 +62,6 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs, save_mod
         if scheduler:
             scheduler.step()
     
-    evaluate(model, test_loader, loss_fn, device=device, visualize = True)
+    evaluate(model, test_loader, loss_fn, device=device, visualize = False)
 
     pass
