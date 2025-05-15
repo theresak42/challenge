@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 from scipy.io import wavfile
+from scipy.signal import find_peaks_cwt
 
 import librosa
 try:
@@ -168,30 +169,27 @@ def LFSF(sample_rate, signal, fps, spect, magspect, melspect, window_size=23, ho
     Onset detection using the LogFiltSpectFlux algorithm.
     """
     
-    """
-    X_k = librosa.stft(
-            signal, hop_length=hop_size, win_length=window_size, window='hann', n_fft=n_fft)
+    hop_length = int(hop_size/1000 * sample_rate)
+    win_length = int(window_size/1000 * sample_rate)
     
-    magnitudes=[]
-    semitone_filterbank, sample_rates = librosa.filters.semitone_filterbank()
-    for cur_sr, cur_filter in zip(sample_rates, semitone_filterbank):
-        w, h = scipy.signal.sosfreqz(cur_filter,fs=cur_sr, worN=n_fft/2+1)
-        print(w,h)
-        magnitudes.append(20 * np.log10(1+lam*np.abs(h)))
-    magnitudes = np.array(magnitudes)
-    print(magnitudes.shape)
-    magspect = np.dot(np.abs(X_k), magnitudes)
-    """
+    X_k = librosa.stft(
+            signal, hop_length=hop_length, win_length=win_length, window='hann', n_fft=n_fft)
+
+    # doc: https://librosa.org/doc/latest/generated/librosa.filters.constant_q.html
+    # n_bins is 84 --> 7 octaves à 12 bins
+    # F_k, F_lengths= librosa.filters.constant_q(sr=sample_rate, fmin=librosa.note_to_hz('C2'), n_bins=84, bins_per_octave=12)
+    #n_fft = X_k.shape[0] * 2 - 2
+    n_bins = 84  # 7 octaves * 12 semitones
+    fmin = librosa.note_to_hz('C2')  # starting at MIDI note 36
+    F_k = librosa.filters.mel(sr=sample_rate, n_fft=n_fft, n_mels=n_bins, fmin=fmin, fmax=sample_rate/2, htk=True)
+
+    X_t = np.dot(F_k, np.abs(X_k))
+    X_f = np.log1p(lam*X_t)
 
     h = 1
-    X_t = np.log10(1+10*magspect)
-    #print(f"X_t: {X_t[0]}")
-    distances = X_t[:, h:] - X_t[:, :int(X_t.shape[1])-h]
-    #print(f"distances: {distances[0]}")
+    distances = X_f[:, h:] - X_f[:, :int(X_f.shape[1])-h]
     values = np.sum(np.maximum(distances, 0), axis=0)
-    print(values[:10])
-    #print(f"\nreturn values shapes: {values.shape}, fps={fps}")
-
+    
     return values, fps
 
 
@@ -210,8 +208,8 @@ def detect_onsets(odf_rate, odf, options):
     #TODO: use smoothing function/ DC removal
 
     #implement custom peak picking
-
-    threshold = 0.15
+    
+    """threshold = 0.15
     strongest_indices = []
     for i, (prev, curr, nex) in enumerate(zip(norm_odf[:len(norm_odf-2)],norm_odf[1:len(norm_odf-1)],norm_odf[2:])):
         if curr > prev and curr > nex and curr > threshold:
@@ -219,8 +217,8 @@ def detect_onsets(odf_rate, odf, options):
 
     strongest_indices = np.array(strongest_indices)
     print(strongest_indices/odf_rate, len(strongest_indices))
-    #input()
-
+    #input()"""
+    strongest_indices = find_peaks_cwt(norm_odf, widths=1)
     return strongest_indices / odf_rate
 
 
@@ -265,8 +263,8 @@ def main():
         results[filename.stem] = detect_everything(filename, options)
 
     # write output file
-    #with open(options.outfile, 'w') as f:
-        #json.dump(results, f)
+    with open(options.outfile, 'w') as f:
+        json.dump(results, f)
 
 
 if __name__ == "__main__":

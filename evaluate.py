@@ -127,8 +127,8 @@ def main():
         print('Beats seemingly not included.')
 
         
-    from utils import vis
-    vis(preds, truth)
+    #from utils import vis
+    #vis(preds, truth)
 
 
 if __name__ == "__main__":

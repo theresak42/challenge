@@ -1,0 +1,18 @@
+    sr = sample_rate
+
+    freqs = librosa.fft_frequencies(sr=sr)
+    #semitone_bins = np.maximum(69+12*np.log2((freqs)/440), 0)
+    semitone_bins = 69+12*np.log2(freqs/440)
+    print(semitone_bins.shape)
+    print(semitone_bins[:10])
+    input()
+
+    import collections
+    semitone_magnitudes = collections.defaultdict(list)
+    for i, midi_note in enumerate(semitone_bins):
+        print(i)
+        semitone_magnitudes[midi_note].append(np.abs(X_k[i, :]))
+
+    semitone_spectrogram = {note: np.mean(mags, axis=0) for note, mags in semitone_magnitudes.items()}
+    print(semitone_spectrogram)
+    input()
