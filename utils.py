@@ -171,6 +171,16 @@ def eval_t(model_path, dataset,modelclass):
 
     return eval_tempo(all_true, all_pred)
 
+def eval_b():
+    """
+    compute beats estimates
+    """
+    all_pred = defaultdict()
+    all_true = defaultdict()
+    #TODO
+    
+    return eval_beats(all_true, all_pred)
+
 
 def custom_detect_peaks(pred, threshold = 0.5):
     #fixed threshold
@@ -253,6 +263,14 @@ def eval_tempo(truth, preds):
                                         0.08)[0]
                for k in truth if k in preds) / len(truth)
 
+def eval_beats(truth, preds):
+    """
+    Computes the average beat detection F-score.
+    """
+    return sum(mir_eval.beat.f_measure(np.asarray(truth[k]['beats']),
+                                       np.asarray(preds[k]['beats']),
+                                       0.07)
+               for k in truth if k in preds) / len(truth)
 
 
 def predict_o(model_path, dataset,model_class, odf_rate, outfile):
@@ -301,3 +319,12 @@ def predict_t(model_path, dataset,model_class, outfile):
                 all_pred[str(os.path.splitext(os.path.basename(filename))[0])] = {'tempo': [tempo/2, tempo]}
     with open(outfile, 'w') as f:
         json.dump(all_pred, f)
+
+
+def predict_b():
+    """
+    get predictions for beat
+    """
+
+    #TODO
+    pass
