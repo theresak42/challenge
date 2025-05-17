@@ -1,15 +1,9 @@
-import tqdm
+
 import torch
 import os
 
-import numpy as np
-from utils import vis
 
-
-
-
-
-def evaluate(model, test_loader, loss_fn, device, visualize = False):
+def evaluate(model, test_loader, loss_fn, device):
     model.eval()
     with torch.no_grad():
         test_loss = 0
@@ -19,9 +13,6 @@ def evaluate(model, test_loader, loss_fn, device, visualize = False):
             labels = labels.to(device)
 
             output = model(data)
-            if visualize:
-                vis(output.cpu(), labels.cpu())
-
             loss = loss_fn(output, labels)
 
             test_loss += loss 
@@ -32,7 +23,7 @@ def evaluate(model, test_loader, loss_fn, device, visualize = False):
     return test_loss
 
 
-def train(model, train_loader, test_loader, optimizer, loss_fn, epochs, save_model=False, model_name="", scheduler=None, device = "cpu"):
+def train(model, train_loader, test_loader, optimizer, loss_fn, epochs, save_model=False, model_name="", device = "cpu"):
     model.train()
     best_loss = evaluate(model, test_loader, loss_fn, device=device)
 
@@ -59,9 +50,5 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs, save_mod
                 torch.save(model.state_dict(), os.path.join('trained_models', model_name + '.pt'))
                 
 
-        if scheduler:
-            scheduler.step()
     
-    evaluate(model, test_loader, loss_fn, device=device, visualize = False)
-
-    pass
+    evaluate(model, test_loader, loss_fn, device=device)

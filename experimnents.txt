@@ -1,0 +1,36 @@
+Onsets
+    CNN1
+        #model_path = r"C:\Users\Jakob S\AI-Studium\6 Semester\Audio_and_Music_Processing\challenge\trained_models\cnn1.pt"
+        #train 20 epochs, cnn1
+
+        fixed threshold(custom_detect_peaks)
+            threshold 0.5:  f1-score 0.833941558133436
+        fixed threshold + smoothing(custom_detect_peaks2)
+            threshold 0.5, window_size 2:   0.8639739355842295
+            threshold 0.4, window_size  2:   0.8660277668309816                         #used for final prediction
+            threshold 0.3, window_size 2:   0.865986292083449
+        adaptive threshold + smoothing(custom_detect_peaks2)
+            lamb = 0.4, winsize 1: 0.8620492937521748
+            lamb = 0.4, winsize 2: 0.8682685388439372
+            lamb = 0.4, winsize 3: 0.8657293278118826
+            lamb = 0.4, winsize 4: 0.8653448114013235
+
+            lamb = 0.3, winsize 2: 0.8687202666562578
+            lamb = 0.25, winsize 2: 0.8695188520185966
+            lamb = 0.2, winsize 2: 0.8699503678113406                                   best_model, but above model performed better on challenge server
+            lamb = 0.15, winsize 2: 0.8689458075320877
+            lamb = 0.1, winsize 2: 0.867848788083857
+
+    RNN
+        #RNN:f1-score 0.786455088685055   hidden_neurons 128 numlayer 2
+
+    CNN2
+        #model_path = r"C:\Users\Jakob S\AI-Studium\6 Semester\Audio_and_Music_Processing\challenge\trained_models\cnn2.pt"
+        #f1-score 0.8407248444261645    
+        #train 30 epochs, cnn2
+        #best val loss 0.36096498
+
+Tempo
+    CNN2
+        #autocorrelation of learned onset function p-value: 0.6768503937007878
+        #learned_autocorrelation+flux_autocorrelation p-value:0.6768503937007878

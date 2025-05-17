@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import find_peaks, find_peaks_cwt
-from utils import smoothing
+
 
 import librosa
 try:
@@ -166,13 +166,12 @@ def detect_onsets(odf_rate, odf, options):
 
     norm_odf = (odf - np.min(odf)) / (np.max(odf) - np.min(odf))
     #print(type(norm_odf), norm_odf.shape)
-    norm_odf_smooth = smoothing(norm_odf, window=5)
     #print(type(norm_odf_smooth), norm_odf_smooth.shape)
     #TODO: use smoothing function/ DC removal
     t = "F"
     if t=="T":
         plt.figure(figsize=(10, 4))
-        plt.plot(norm_odf_smooth, color='dodgerblue', linewidth=2)
+        plt.plot(norm_odf, color='dodgerblue', linewidth=2)
         plt.title("Onset Strength Over Time")
         plt.xlabel("Time Frame (t)")
         plt.ylabel("Strength")
@@ -188,7 +187,7 @@ def detect_onsets(odf_rate, odf, options):
 
     threshold = 0.05
     strongest_indices = []
-    for i, (prev, curr, nex) in enumerate(zip(norm_odf_smooth[:len(norm_odf-2)],norm_odf_smooth[1:len(norm_odf_smooth-1)],norm_odf[2:])):
+    for i, (prev, curr, nex) in enumerate(zip(norm_odf[:len(norm_odf-2)],norm_odf[1:len(norm_odf-1)],norm_odf[2:])):
         if curr > prev and curr > nex and curr > threshold:
             strongest_indices.append(i+1)
 

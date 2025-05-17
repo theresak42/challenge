@@ -59,6 +59,9 @@ class CNN_model2(nn.Module):
         x = x.squeeze(2).squeeze(1)
         return x
 
+
+
+
 class RNN_model(nn.Module):
     def __init__(self, input_size=80, hidden_size=256, num_layers=4, bidirectional=True):
         super().__init__()
