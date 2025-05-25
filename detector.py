@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import find_peaks, find_peaks_cwt
-from utils import smoothing
+from utils import smoothing, salience, salience1, choose_best_agent, remove_duplicate_agents, salience_ioi_based
+from utils import beat_agent, IOICluster
 
 import librosa
 try:
@@ -217,8 +218,11 @@ def detect_tempo(sample_rate, signal, fps, spect, magspect, melspect,
     # it uses the time difference between the first two onsets to
     # define the tempo, and returns half of that as a second guess.
     # this is not a useful solution at all, just a placeholder.
-    tempo = 60 / (onsets[1] - onsets[0])
-    return [tempo / 2, tempo]
+    #tempo = 60 / (onsets[1] - onsets[0])
+    #return [tempo / 2, tempo]
+    clusters = IOICluster()
+    tempo = clusters.run(onsets)
+    return tempo
 
 
 def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
@@ -230,7 +234,78 @@ def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
     # we only have a dumb dummy implementation here.
     # it returns every 10th onset as a beat.
     # this is not a useful solution at all, just a placeholder.
-    return onsets[::10]
+
+    print("Onsets: ")
+    print(onsets[:20])
+    print(len(onsets))
+
+    print("Tempo:")
+    print(tempo[0])
+    startup_period = len(onsets)//10
+    timeout = 10
+    correction_factor = 2
+    tol_inner = 40./1000. # s = 40 ms
+    p_tol_pre = 0.2
+    p_tol_post= 0.4
+
+    #return onsets[::10]
+
+
+    """    clusters = IOICluster()
+        tempo = clusters.run(onsets)
+        print(f"My tempi: {tempo}")
+    """
+    # Initialization
+    agents = []
+    for t_i in tempo:
+        if t_i > 0:
+            for e_j in onsets[:startup_period]:
+                agent = beat_agent(beat_interval=60/t_i, 
+                                pred = e_j+60/t_i, 
+                                hist = [e_j], 
+                                score = salience_ioi_based(e_j, onsets))
+                agents.append(agent)
+    print(f"Initialized {len(agents)} agents.")
+
+    # Main loop
+    for j, e_j in enumerate(onsets):
+        for i, a_i in enumerate(agents):
+            new_agents = []
+            to_be_deleted = []
+            if e_j - a_i.history[-1] > timeout:
+                #pass
+                #print(f"onset: {e_j}, last: {a_i.history[-1]}")
+                to_be_deleted.append(i)
+                #break
+            else:
+                tol_post = a_i.beatInterval*p_tol_post
+                tol_pre = a_i.beatInterval*p_tol_pre
+
+                while a_i.prediction + tol_post < e_j:
+                    a_i.prediction += a_i.beatInterval
+
+                if a_i.prediction+tol_pre <= e_j and e_j <= a_i.prediction+tol_post:
+                    if a_i.prediction - e_j > tol_inner:
+                        new_agents.append(a_i.copy())
+                    error = np.abs(e_j - a_i.prediction)
+                    err_rel = error/a_i.beatInterval
+                    a_i.beatInterval += error/correction_factor
+                    a_i.prediction = e_j + a_i.beatInterval
+                    #a_i.prediction = np.round(a_i.prediction)
+                    a_i.history.append(e_j)
+                    a_i.score = (1-err_rel/2)*salience_ioi_based(e_j, onsets)
+                    #a_i.score = np.round(a_i.score, 5)
+        agents+=new_agents
+        if len(to_be_deleted)>0:
+            print(f"Deleted {len(to_be_deleted)} timeouts in {len(agents)} agents.")
+        agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
+        agents = remove_duplicate_agents(agents)
+
+    best_agent = choose_best_agent(agents)
+
+    print(f"Beats: {best_agent.history}")
+    return best_agent.history
+    #return onsets[::10]
 
 
 def main():
