@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import find_peaks, find_peaks_cwt
-from utils import smoothing, salience, salience1, choose_best_agent, remove_duplicate_agents, salience_ioi_based
+from utils import smoothing, salience, salience1, choose_best_agent, remove_duplicate_agents, salience_gaussian, salience_interval_based
 from utils import beat_agent, IOICluster
 
 import librosa
@@ -242,8 +242,8 @@ def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
     print("Tempo:")
     print(tempo[0])
     startup_period = len(onsets)//10
-    timeout = 10
-    correction_factor = 2
+    timeout = 5
+    correction_factor = 10
     tol_inner = 40./1000. # s = 40 ms
     p_tol_pre = 0.2
     p_tol_post= 0.4
@@ -263,38 +263,48 @@ def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
                 agent = beat_agent(beat_interval=60/t_i, 
                                 pred = e_j+60/t_i, 
                                 hist = [e_j], 
-                                score = salience_ioi_based(e_j, onsets))
+                                score = salience_interval_based(60./t_i))
                 agents.append(agent)
     print(f"Initialized {len(agents)} agents.")
 
     # Main loop
-    for j, e_j in enumerate(onsets):
+    for _, e_j in enumerate(onsets):
         for i, a_i in enumerate(agents):
             new_agents = []
             to_be_deleted = []
             if e_j - a_i.history[-1] > timeout:
-                #pass
-                #print(f"onset: {e_j}, last: {a_i.history[-1]}")
                 to_be_deleted.append(i)
-                #break
+                continue
+            if a_i.last_hit > timeout:
+                to_be_deleted.append(i)
+                continue
             else:
                 tol_post = a_i.beatInterval*p_tol_post
                 tol_pre = a_i.beatInterval*p_tol_pre
 
                 while a_i.prediction + tol_post < e_j:
+                    a_i.history.append(a_i.prediction)
                     a_i.prediction += a_i.beatInterval
 
                 if a_i.prediction+tol_pre <= e_j and e_j <= a_i.prediction+tol_post:
-                    if a_i.prediction - e_j > tol_inner:
-                        new_agents.append(a_i.copy())
                     error = np.abs(e_j - a_i.prediction)
                     err_rel = error/a_i.beatInterval
-                    a_i.beatInterval += error/correction_factor
+                    
+                    if abs(a_i.prediction - e_j) > tol_inner: 
+                        # if prediction is within outer but out of inner tolerance 
+                        # --> create new agent based on prediction value (not actual event)
+                        new_a_i = a_i.copy()
+                        new_agents.append(new_a_i)
+                        # without updating beat_interval
+                        new_a_i.prediction = a_i.prediction + new_a_i.beatInterval
+                        new_a_i.history.append(a_i.prediction)
+                        new_a_i.score = (1-err_rel/2)*salience_gaussian(e_j, new_a_i.history[-1])
+                        new_a_i.last_hit += 1
+                        
+                    a_i.beatInterval += error/correction_factor #with updating beat interval
                     a_i.prediction = e_j + a_i.beatInterval
-                    #a_i.prediction = np.round(a_i.prediction)
                     a_i.history.append(e_j)
-                    a_i.score = (1-err_rel/2)*salience_ioi_based(e_j, onsets)
-                    #a_i.score = np.round(a_i.score, 5)
+                    a_i.score = (1-err_rel/2)*salience_gaussian(e_j, a_i.history[-1])
         agents+=new_agents
         if len(to_be_deleted)>0:
             print(f"Deleted {len(to_be_deleted)} timeouts in {len(agents)} agents.")
@@ -302,6 +312,26 @@ def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
         agents = remove_duplicate_agents(agents)
 
     best_agent = choose_best_agent(agents)
+
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(12, 4))
+
+    # Plot all onsets as vertical lines
+    for onset in onsets:
+        plt.axvline(x=onset, color='gray', linestyle='--', alpha=0.5)
+
+    # Plot best agent's beat predictions
+    plt.vlines(best_agent.history, ymin=0, ymax=1, color='red', label='Predicted Beats')
+
+    plt.title("Onsets vs Predicted Beats")
+    plt.xlabel("Time (s)")
+    plt.yticks([])  # Remove y-axis ticks (not needed)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
 
     print(f"Beats: {best_agent.history}")
     return best_agent.history

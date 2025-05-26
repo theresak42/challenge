@@ -204,6 +204,7 @@ def salience1(x=None):
     return 1
 
 def salience_ioi_based(onset, onsets, window=0.05):
+    assert(isinstance(onsets, np.ndarray))
     index = np.where(onsets == onset)[0][0]
     prev = onsets[index - 1] if index > 0 else onset
     next = onsets[index + 1] if index < len(onsets) - 1 else onset
@@ -211,18 +212,25 @@ def salience_ioi_based(onset, onsets, window=0.05):
     ioi_next = next - onset
     return 1.0 / (1.0 + abs(ioi_prev - ioi_next))
 
+def salience_interval_based(interval, window=0.05):
+    return 1.0 / (1.0 + abs(interval))
+
+def salience_gaussian(onset, expected_time, std=0.05):
+    return np.exp(-((onset - expected_time) ** 2) / (2 * std ** 2))
+
+
 
 class beat_agent():
-    def __init__(self, beat_interval, pred, hist, score):
+    def __init__(self, beat_interval, pred, hist, score, last_hit=0):
         self.beatInterval = beat_interval
         self.prediction = pred
         self.history = hist
         self.score = score
-        #self.last_update = hist[0]
+        self.last_hit = last_hit
         #print(f"beat interval is {beat_interval}")
     
     def copy(self):
-        return beat_agent(self.beatInterval, self.prediction, self.history, self.score)
+        return beat_agent(self.beatInterval.copy(), self.prediction.copy(), self.history.copy(), self.score.copy(), self.last_hit)
 
 
 class IOICluster():
@@ -345,15 +353,18 @@ def choose_best_agent(agents):
 
     return best_agent
 
-def remove_duplicate_agents(agents):
+def remove_duplicate_agents(agents, view=10):
     if len(agents)<2:
         return agents
     
     to_be_deleted = []
     for i, agent1 in enumerate(agents):
         for j, agent2 in zip(range(i+1, len(agents)), agents[i+1:]):
-            if agent1.beatInterval==agent2.beatInterval and agent1.prediction==agent2.prediction and agent2.history[-5:]==agent2.history[-5:] and agent1.score==agent2.score:
-                to_be_deleted.append(j)
+            if agent1.beatInterval==agent2.beatInterval and agent1.prediction==agent2.prediction and agent1.history[-view:]==agent2.history[-view:] and agent1.score==agent2.score:
+                if len(agent1.history) >= len(agent2.history):
+                    to_be_deleted.append(j) # keep the agent with the longer history
+                else:
+                    to_be_deleted.append(i)
     agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
     if len(to_be_deleted)>0:
         print(f"Deleted {len(to_be_deleted)} duplicates")
