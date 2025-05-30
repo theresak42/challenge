@@ -19,6 +19,16 @@ import numpy as np
 from scipy.io import wavfile
 from scipy.signal import find_peaks, find_peaks_cwt
 
+from data import *
+from model import *
+from utils import *
+from train import train
+
+from torch.utils.data import DataLoader
+from torch.optim import AdamW
+from torch.nn import BCEWithLogitsLoss
+
+
 
 import librosa
 try:
@@ -131,6 +141,7 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     # we only have a dumb dummy implementation here.
     # it returns every 1000th absolute sample value of the input signal.
     # this is not a useful solution at all, just a placeholder.
+    """
     values = np.abs(signal[::1000])
     values_per_second = sample_rate / 1000
 
@@ -145,12 +156,9 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
 
     values_per_second = fps
 
-    #print(dSD_t.shape)
-    
-
-    
-
     return dSD_t, values_per_second
+    """
+    return
 
 
 def detect_onsets(odf_rate, odf, options):
@@ -164,6 +172,8 @@ def detect_onsets(odf_rate, odf, options):
     #strongest_indices = np.argpartition(odf, 100)[:100]
     #strongest_indices.sort()
 
+
+    """
     norm_odf = (odf - np.min(odf)) / (np.max(odf) - np.min(odf))
     #print(type(norm_odf), norm_odf.shape)
     #print(type(norm_odf_smooth), norm_odf_smooth.shape)
@@ -204,6 +214,53 @@ def detect_onsets(odf_rate, odf, options):
 
 
     return strongest_indices / odf_rate
+    """
+    data_split = 0.8
+    fps =70
+
+    data, labels, sr, hoplength = load_data(indir,methode="onsets", use_extra=True, fps=fps)
+    
+    print("Data loaded")
+
+    len_data = int(len(data)*data_split)
+    complete_dataset = AudioDataset(data, labels)
+    train_dataset = AudioDataset(data[:len_data], labels[:len_data])
+    val_dataset = AudioDataset(data[len_data:], labels[len_data:])
+
+    
+
+    train_dataloader = DataLoader(train_dataset, 4, shuffle= True, collate_fn = collate_fn)
+    val_dataloader = DataLoader(val_dataset, 4, shuffle= False, collate_fn = collate_fn)
+    print("Dataloader ready")
+
+    tempo_data, tempos, *_ = load_data(indir, methode="tempo", use_extra=False, fps = fps)
+    tempo_dataset = AudioDataset(tempo_data, tempos)
+
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Running on {device}")
+
+    model = CNN_model2().to(device)
+
+    num_epochs = 35
+
+    optimizer = AdamW(model.parameters(), lr = 0.0001)
+
+    loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor([24.0]).to(device))
+
+
+    #train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device, save_model=True, model_name="cnn3")
+
+    model_path = r"\trained_models\cnn2.pt"
+
+    #evaluate onsets
+    #f1 = eval_o(model_path,complete_dataset,CNN_model2,fps,sr,hoplength, threshold=0.4)
+    #print(f1)
+
+    #evaluate tempos
+    p_score = eval_t(model_path, tempo_dataset, CNN_model2)
+    print(p_score)
+
 
 
 def detect_tempo(sample_rate, signal, fps, spect, magspect, melspect,

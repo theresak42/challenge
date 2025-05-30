@@ -60,6 +60,84 @@ def vis_tempo(autocorrelation, autocorrelation_flux, labels):
     fig.show()
     input()
 
+def vis_beats(true_onsets, pred_onsets, true_beats, pred_beats, title="Onsets and Beats"):
+    """
+    Plots true and predicted onsets and beats using Plotly.
+
+    Parameters:
+    - true_onsets: list of float, time in seconds
+    - pred_onsets: list of float, time in seconds
+    - true_beats: list of float, time in seconds
+    - pred_beats: list of float, time in seconds
+    - title: string, plot title
+    """
+    
+    fig = go.Figure()
+
+    # True Onsets
+    if true_onsets:
+        for t in true_onsets:
+            fig.add_trace(go.Scatter(
+                x=[t, t],
+                y=[0, 1],
+                mode="lines",
+                name="True Onset",
+                line=dict(color="green", dash="solid"),
+                showlegend=False  # Avoid multiple entries in legend
+            ))
+        #if true_onsets.any():
+        #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="True Onset", line=dict(color="green", dash="solid")))
+
+    # Predicted Onsets
+    for t in pred_onsets:
+        fig.add_trace(go.Scatter(
+            x=[t, t],
+            y=[0, 1],
+            mode="lines",
+            name="Predicted Onset",
+            line=dict(color="red", dash="dash"),
+            showlegend=False
+        ))
+    #if pred_onsets:
+    #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="Predicted Onset", line=dict(color="red", dash="dash")))
+
+    # True Beats
+    for t in true_beats:
+        fig.add_trace(go.Scatter(
+            x=[t, t],
+            y=[0, 1],
+            mode="lines",
+            name="True Beat",
+            line=dict(color="blue", dash="solid"),
+            showlegend=False
+        ))
+    #if true_beats:
+    #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="True Beat", line=dict(color="blue", dash="solid")))
+
+    # Predicted Beats
+    for t in pred_beats:
+        fig.add_trace(go.Scatter(
+            x=[t, t],
+            y=[0, 1],
+            mode="lines",
+            name="Predicted Beat",
+            line=dict(color="orange", dash="dash"),
+            showlegend=False
+        ))
+    #if pred_beats:
+    #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="Predicted Beat", line=dict(color="orange", dash="dash")))
+
+    # Layout
+    fig.update_layout(
+        title=title,
+        xaxis_title="Time (s)",
+        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=300
+    )
+
+    fig.show()
+
 
 def eval_o(model_path, dataset,model_class, odf_rate, sr, hoplength, threshold=0.5):
     """
@@ -113,7 +191,7 @@ def eval_t(model_path, dataset,modelclass):
 
     #load model
     model = modelclass()
-    model.load_state_dict(torch.load(model_path, weights_only=True))
+    model.load_state_dict(torch.load(model_path, weights_only=True, map_location=torch.device('cpu')))
     model.eval()
 
 
@@ -171,14 +249,25 @@ def eval_t(model_path, dataset,modelclass):
 
     return eval_tempo(all_true, all_pred)
 
-def eval_b():
+def eval_b(dataset, onsets_all, tempo_all):
     """
     compute beats estimates
     """
     all_pred = defaultdict()
     all_true = defaultdict()
-    #TODO
     
+    for i in range(len(dataset)):
+        #get predictions
+        data, labels = dataset[i]
+        onsets = onsets_all[i]
+        tempo = tempo_all[i]
+        
+        all_pred[i] = predict_b(onsets, tempo)
+        all_true[i] = labels
+
+        #vis_beats(true_onsets=None, pred_onsets=onsets, true_beats=labels, pred_beats=all_pred[i])
+        #input()
+
     return eval_beats(all_true, all_pred)
 
 
@@ -267,8 +356,8 @@ def eval_beats(truth, preds):
     """
     Computes the average beat detection F-score.
     """
-    return sum(mir_eval.beat.f_measure(np.asarray(truth[k]['beats']),
-                                       np.asarray(preds[k]['beats']),
+    return sum(mir_eval.beat.f_measure(np.asarray(truth[k]),
+                                       np.asarray(preds[k]),
                                        0.07)
                for k in truth if k in preds) / len(truth)
 
@@ -321,10 +410,354 @@ def predict_t(model_path, dataset,model_class, outfile):
         json.dump(all_pred, f)
 
 
-def predict_b():
+def predict_b(onsets, tempo):
     """
     get predictions for beat
     """
+    startup_period = len(onsets)//10
+    timeout = 5
+    correction_factor = 5
+    tol_inner = 40./1000. # s = 40 ms
+    p_tol_pre = 0.2
+    p_tol_post= 0.4
 
-    #TODO
-    pass
+    # Initialization
+    agents = []
+    for t_i in tempo:
+        if t_i > 0:
+            for e_j in onsets[:startup_period]:
+                agent = beat_agent(beat_interval=60/t_i, 
+                                pred = e_j+60/t_i, 
+                                hist = [e_j], 
+                                score = salience_interval_based(60./t_i))
+                agents.append(agent)
+    #print(f"Initialized {len(agents)} agents.")
+
+    # Main loop
+    for _, e_j in enumerate(onsets):
+        for i, a_i in enumerate(agents):
+            new_agents = []
+            to_be_deleted = []
+            if e_j - a_i.history[-1] > timeout:
+                to_be_deleted.append(i)
+                continue
+            if a_i.last_hit > timeout:
+                to_be_deleted.append(i)
+                continue
+            else:
+                tol_post = a_i.beatInterval*p_tol_post
+                tol_pre = a_i.beatInterval*p_tol_pre
+
+                while a_i.prediction + tol_post < e_j:
+                    a_i.history.append(a_i.prediction)
+                    a_i.prediction += a_i.beatInterval
+
+                if a_i.prediction+tol_pre <= e_j and e_j <= a_i.prediction+tol_post:
+                    error = e_j - a_i.prediction
+                    err_rel = error/a_i.beatInterval
+                    
+                    if abs(a_i.prediction - e_j) > tol_inner: 
+                        # if prediction is within outer but out of inner tolerance 
+                        # --> create new agent based on prediction value (not actual event)
+                        new_a_i = a_i.copy()
+                        new_agents.append(new_a_i)
+                        # without updating beat_interval
+                        new_a_i.prediction = a_i.prediction + new_a_i.beatInterval
+                        new_a_i.history.append(a_i.prediction)
+                        new_a_i.score = (1-err_rel/2)*salience_gaussian(e_j, new_a_i.history[-1])
+                        new_a_i.misses += 1
+                        
+                    a_i.beatInterval -= error/correction_factor #with updating beat interval
+                    a_i.prediction = e_j + a_i.beatInterval
+                    a_i.history.append(e_j)
+                    a_i.score = (1-err_rel/2)*salience_gaussian(e_j, a_i.history[-1])
+        agents+=new_agents
+        if len(to_be_deleted)>0 and len(agents) > len(to_be_deleted):
+            #print(f"Deleted {len(to_be_deleted)} timeouts in {len(agents)} agents.")
+            agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
+        agents = remove_duplicate_agents(agents)
+
+    best_agent = choose_best_agent(agents)
+
+
+    #print(f"Beats: {best_agent.history}")
+    return best_agent.history
+    
+
+
+
+def get_onsets(model_path, dataset, model_class, odf_rate, sr, hoplength, threshold=0.5, device=torch.device('cpu')):
+    """
+    get f1-score of data
+    model_path:             path of model
+    dataset:                data used for evaluation
+    model_class:            which model to load
+    odf_rate:               same as fps
+    sr:
+    hoplength:
+    threshold:              threshold used for peak detection function
+    """
+
+    #load model
+    model = model_class()
+    model.load_state_dict(torch.load(model_path, weights_only=True, map_location=device))
+    model.eval()
+
+    all_pred = defaultdict()
+    with torch.no_grad():
+        for i in range(len(dataset)):
+                #get predictions
+                data, labels = dataset[i]
+                data = torch.tensor(data).unsqueeze(0).unsqueeze(1).float()
+                pred = model(data).numpy()[0]
+                
+                #peak detection fucntion
+                #dividing by odf_rate gives the timesteps
+                strongest_indices = custom_detect_peaks2(pred, threshold=threshold)/ odf_rate
+                
+                all_pred[i] = strongest_indices
+    return all_pred
+
+def get_tempo(model_path, dataset,modelclass):
+    """
+    compute tempo estimate
+    model_path:             path of model
+    dataset:                data used for evaluation
+    model_class:            which model to load
+    """
+
+    #load model
+    model = modelclass()
+    model.load_state_dict(torch.load(model_path, weights_only=True, map_location=torch.device('cpu')))
+    model.eval()
+
+
+    all_pred = defaultdict()
+
+    with torch.no_grad():
+        for i in range(len(dataset)):
+            #get detection function
+            data, labels = dataset[i]
+            tensor_data = torch.tensor(data).unsqueeze(0).unsqueeze(1).float()
+            pred = model(tensor_data).numpy()[0]
+
+            #compute autocorrelation of detection function
+            autocorrelation = np.array([np.dot(pred[:-tau], pred[tau:]) for tau in range(21, 70)])          #autocorrelation
+            autocorrelation = autocorrelation/np.max(autocorrelation)                                       #devide by max to get values in range [0,1]
+            
+            #compute autocorrelation of spectral flux
+            h=1
+            sd_t = data[:, h:] - data[:, :int(data.shape[1])-h]
+            hw_t = np.maximum(0,sd_t)**2
+            dSD_t = np.sum(hw_t, axis=0)
+            autocorrelation_flux = np.array([np.dot(dSD_t[:-tau], dSD_t[tau:]) for tau in range(21, 70)])   #autocorrelation
+            autocorrelation_flux = autocorrelation_flux/np.max(autocorrelation_flux)                        #devide by max to get values in range [0,1]
+
+            #vis_tempo(autocorrelation, autocorrelation_flux, labels)                                       #visualize the two autocorrelation functions and the true tempo
+
+            #get index of autocorerlation
+            #NOTE: converting the index to bpm one has to add 21 to the index since the autocorrelation function starts with 0
+            #      and devide 60(seconds)*70(fps)/index to get the tempo
+            tempo = 4200/(np.argmax(autocorrelation)+21)
+            #add a second estimate of half the tempo
+            all_pred[i] = [tempo/2, tempo]
+            
+    return all_pred
+
+
+"""
+Beat detection helper functions
+"""
+
+def salience(d, p, v, type_="additive", c1=300, c2=-4, c3=1, c4=84, pmin=48, pmax=72):
+    def select_p(p):
+        if p<= pmin:
+            return pmin
+        elif pmax <= p:
+            return pmax
+        else:
+            return p
+    
+    if type_ == "additive":
+        return c1*d + c2*select_p(p) + c3*v
+    elif type == "multiplicative":
+        return d*(c4-select_p(p))*np.log(v)
+    else:
+        return 1
+
+def salience1(x=None):
+    return 1
+
+def salience_ioi_based(onset, onsets, window=0.05):
+    assert(isinstance(onsets, np.ndarray))
+    index = np.where(onsets == onset)[0][0]
+    prev = onsets[index - 1] if index > 0 else onset
+    next = onsets[index + 1] if index < len(onsets) - 1 else onset
+    ioi_prev = onset - prev
+    ioi_next = next - onset
+    return 1.0 / (1.0 + abs(ioi_prev - ioi_next))
+
+def salience_interval_based(interval, window=0.05):
+    return 1.0 / (1.0 + abs(interval))
+
+def salience_gaussian(onset, expected_time, std=0.05):
+    return np.exp(-((onset - expected_time) ** 2) / (2 * std ** 2))
+
+
+
+class beat_agent():
+    def __init__(self, beat_interval, pred, hist, score, misses=0):
+        self.beatInterval = beat_interval
+        self.prediction = pred
+        self.history = hist
+        self.score = score
+        self.misses = misses
+        #print(f"beat interval is {beat_interval}")
+    
+    def copy(self):
+        return beat_agent(self.beatInterval.copy(), self.prediction.copy(), self.history.copy(), self.score.copy(), self.misses)
+
+
+class IOICluster():
+    """
+    IOI clustering algorithm implementation 
+    inspired by "Automatic Extraction of Tempo 
+    and Beat from Expressive Performances" by
+    Simon Dixon, 2001
+    (algortihm for IOI clustering on page 12)
+    """
+    def __init__(self, cluster_width=0.3):
+        self.cluster_width = cluster_width
+        self.clusters = [] # initialize empty list for saving our clusters
+
+    def compute_iois(self, onsets):
+        iois = []
+        for i, e_i in enumerate(onsets):
+            for j, e_j in zip(range(i+1, len(onsets)), onsets[i+1:]):
+                ioi = np.round(np.abs(e_i-e_j), 5)
+                iois.append((i, j, ioi))
+        return iois
+    
+    def cluster_iois(self, iois):
+        for i, j, ioi in iois:
+            best_cluster = None
+            best_distance = float("inf")
+            for cluster in self.clusters:
+                cluster_mean = np.mean(cluster)
+                distance = abs(cluster_mean - ioi)
+                if distance < self.cluster_width and distance < best_distance:
+                    best_cluster = cluster
+                    best_distance = distance
+            
+            if best_cluster is not None: # if k exists then add IOI_ij to C_k
+                # fitting cluster found --> add ioi to this cluster
+                best_cluster.append(ioi)
+            else: # else create new cluster C_m = {IOI_ij}
+                # no fitting cluster found --> create new cluster
+                self.clusters.append([ioi]) 
+        # remove duplicates --> not necessary!!!!!
+        #for i, c_i in enumerate(self.clusters):
+        #    self.clusters[i] = list(set(c_i))
+
+        # we do not need to return anything --> we set self values
+    
+    def merge_clusters(self):
+        to_be_deleted = []
+        for i, c_i in enumerate(self.clusters):
+            c_i_mean = np.mean(c_i)
+            for j, c_j in zip(range(i+1, len(self.clusters)), self.clusters[i+1:]):
+                c_j_mean = np.mean(c_j)
+                if abs(c_i_mean-c_j_mean) < self.cluster_width:
+                    c_i+= c_j
+                    to_be_deleted.append(j)
+        self.clusters = [cluster for i, cluster in enumerate(self.clusters) if i not in to_be_deleted]
+
+
+    def f(self, d): # relationship function 
+        if d >= 1 and d <= 4:
+            return 6-d
+        elif d >= 5 and d<=8:
+            return 1
+        else:
+            return 0
+        
+    def f2(self, n):
+        # inverse harmonic penalty
+        return 1.0 / n
+    
+    def rank_clusters(self):
+        scores = [0]*len(self.clusters)
+        for i, c_i in enumerate(self.clusters):
+            c_i_mean = np.mean(c_i)
+            for j, c_j in enumerate(self.clusters):
+                if i == j:
+                    continue
+                c_j_mean = np.mean(c_j)
+                for k in range(1, 5): # harmonic multiples 1 to 4
+                    if abs(c_i_mean - k*c_j_mean) < self.cluster_width:
+                        scores[i] += self.f(k) * len(c_j)
+        return scores
+    
+    def find_tempi(self, scores):
+        ranks = np.argsort(scores)[::-1]
+        
+        tempo_hypotheses = []
+        for i, cluster in enumerate(self.clusters):
+            c_mean = np.mean(cluster)
+            tempo_hypotheses.append(60/c_mean)
+        tempo_hypotheses = np.array(tempo_hypotheses)[ranks]
+        indices = np.where((tempo_hypotheses>60) & (tempo_hypotheses<200))
+        tempi = tempo_hypotheses[indices]
+        return tempi
+
+    def run(self, onsets):
+        iois = self.compute_iois(onsets)
+        self.cluster_iois(iois)
+        self.merge_clusters()
+        scores = self.rank_clusters() 
+        tempi = self.find_tempi(scores)
+        return tempi
+    
+
+def choose_best_agent(agents):
+    if len(agents) < 1:
+        #print("No agents")
+        return
+    
+    best_agent = agents[0]
+    best_score = best_agent.score
+    i = 0
+    best_ind = 0
+    for agent in agents[1:]:
+        if agent.score > best_score:
+            best_agent = agent
+            best_score = best_agent.score
+            best_ind=i
+        i+=1
+    #print(f"The best agent is agent {best_ind}.")
+
+    return best_agent
+
+def remove_duplicate_agents(agents, view=5):
+    if len(agents)<2:
+        return agents
+    
+    to_be_deleted = []
+    for i, agent1 in enumerate(agents):
+        for j, agent2 in zip(range(i+1, len(agents)), agents[i+1:]):
+            if agent1.beatInterval==agent2.beatInterval and agent1.prediction==agent2.prediction and agent1.history[-view:]==agent2.history[-view:]:# and agent1.score==agent2.score:
+                if len(agent1.history) >= len(agent2.history):
+                    to_be_deleted.append(j) # keep the agent with the longer history
+                else:
+                    to_be_deleted.append(i)
+                """
+                if agent1.score >= agent2.score:
+                    to_be_deleted.append(j) # keep the agent with the higher score
+                else:
+                    to_be_deleted.append(i)
+                """
+    agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
+    #if len(to_be_deleted)>0:
+        #print(f"Deleted {len(to_be_deleted)} duplicates")
+    return agents
+

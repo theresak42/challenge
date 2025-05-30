@@ -34,3 +34,7 @@ Tempo
     CNN2
         #autocorrelation of learned onset function p-value: 0.6768503937007878
         #learned_autocorrelation+flux_autocorrelation p-value:0.6768503937007878
+
+Beats
+    Multi-agent approach
+        0.3184081995350585

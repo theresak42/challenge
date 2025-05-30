@@ -86,7 +86,10 @@ def preprocess_labels(filename, methode, melspec=None, sr=None, hoplength=None):
         final_labels = []
         with open(filename, "r") as f:
             for line in f.readlines():
-                values = list(map(float, line.replace("\n","").split("\t")[0]))
+                try:
+                    values = list(map(float, line.replace("\n","").split("\t")[0].split(" ")))
+                except:
+                    print(line.replace("\n","").split("\t")[0])
                 final_labels += values
         
 
