@@ -139,7 +139,7 @@ def vis_beats(true_onsets, pred_onsets, true_beats, pred_beats, title="Onsets an
     fig.show()
 
 
-def eval_o(model_path, dataset,model_class, odf_rate, sr, hoplength, threshold=0.5):
+def eval_o(model_path, dataset,model_class, odf_rate, sr, hoplength, threshold=0.5, type_="onsets"):
     """
     get f1-score of data
     model_path:             path of model
@@ -175,10 +175,14 @@ def eval_o(model_path, dataset,model_class, odf_rate, sr, hoplength, threshold=0
 
                 all_pred[i] = strongest_indices
                 all_true[i] = label_times
+
+                print(f"Sample {i} predicts {len(all_pred[i])} beats: {all_pred[i][:10]}")
                 #vis_onsets([pred], [labels])                       #visualize detection function + true peaks
                 #vis_onsets([pred], [labels], [librosa.time_to_frames(strongest_indices, sr=sr, hop_length=hoplength)])  #visualize detection function + true peaks + perdicted peaks
     
     #return f1-score
+    if type_ == "beats":
+        return eval_beats(all_true, all_pred)
     return eval_onsets(all_true, all_pred)
 
 def eval_t(model_path, dataset,modelclass):
@@ -356,9 +360,12 @@ def eval_beats(truth, preds):
     """
     Computes the average beat detection F-score.
     """
+    print(f"Beat evaluation")
+    print(f"truth: {truth}")
+    print(f"predictions: {preds}")
     return sum(mir_eval.beat.f_measure(np.asarray(truth[k]),
                                        np.asarray(preds[k]),
-                                       0.07)
+                                       0.07)[0]
                for k in truth if k in preds) / len(truth)
 
 

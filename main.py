@@ -52,8 +52,8 @@ def main(indir):
 
     #evaluate tempos
 
-    #p_score = eval_t(model_path, tempo_dataset, CNN_model2)
-    #print(p_score)
+    p_score = eval_t(model_path, tempo_dataset, CNN_model2)
+    print(p_score)
 
 
     #get predictions
@@ -63,17 +63,6 @@ def main(indir):
     #predict_o(model_path, test_data,CNN_model2, fps, r"pred\cnn_3.1.onset.pr")
     #predict_t(model_path, test_data, CNN_model2, r"pred\cnn_1.tempo.pr")
     
-
-    data_b, labels_b, _, _ = load_data(indir, methode="beats", train=True, use_extra=False)
-    beats_dataset = AudioDataset(data_b, labels_b)
-
-    onsets = get_onsets(model_path, complete_dataset, CNN_model2, fps,sr,hoplength, threshold=0.4)
-    tempo = get_tempo(model_path, tempo_dataset, CNN_model2)
-    b_score = eval_b(beats_dataset, onsets, tempo)
-
-    print(f"Run successfull.")
-    print(f"b_score = {b_score}")
-
 
 
 if __name__ == "__main__":
