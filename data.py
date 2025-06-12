@@ -81,7 +81,21 @@ def preprocess_labels(filename, methode, melspec=None, sr=None, hoplength=None):
     elif methode == "tempo":
         with open(filename, "r") as f:
             final_labels = list(map(float, f.readline().replace("\n","").split("\t")))
+        """
+    elif methode == "beats":
+        labels = []
+        with open(filename, "r") as f:
+            for line in f.readlines():
+                values = list(map(float, line.replace("\n","").split("\t")[0].split(" ")))
+                labels += values
 
+        #converting to array of 0s and 1s
+        final_labels = np.zeros(melspec.shape[1], dtype=np.float32)
+        frame_times = librosa.frames_to_time(np.arange(melspec.shape[1]), sr=sr, hop_length=hoplength)
+        for label in labels:
+            index = np.argmin(np.abs(frame_times-label))
+            final_labels[index] = 1.0
+        """
     elif methode == "beats":
         final_labels = []
         with open(filename, "r") as f:
@@ -91,8 +105,7 @@ def preprocess_labels(filename, methode, melspec=None, sr=None, hoplength=None):
                 except:
                     print(line.replace("\n","").split("\t")[0])
                 final_labels += values
-        
-
+    
     return final_labels
 
 
@@ -140,7 +153,7 @@ def load_data(indir, methode = "onsets", train=True, use_extra = True, fps=70):
             elif methode == "tempo":
                 pre_labels = preprocess_labels(label_filename, methode)
             elif methode == "beats":
-                pre_labels = preprocess_labels(label_filename, methode)
+                pre_labels = preprocess_labels(label_filename, methode, melspec, sr, hoplength)
                     
             labels.append(pre_labels)
             

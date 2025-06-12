@@ -175,8 +175,10 @@ def eval_o(model_path, dataset,model_class, odf_rate, sr, hoplength, threshold=0
 
                 all_pred[i] = strongest_indices
                 all_true[i] = label_times
+                #if len(label_times) < 2:
+                #    print(f"Sample {i}, truths: {label_times}")
 
-                print(f"Sample {i} predicts {len(all_pred[i])} beats: {all_pred[i][:10]}")
+                #print(f"Sample {i} predicts {len(all_pred[i])} beats: {all_pred[i][:10]}")
                 #vis_onsets([pred], [labels])                       #visualize detection function + true peaks
                 #vis_onsets([pred], [labels], [librosa.time_to_frames(strongest_indices, sr=sr, hop_length=hoplength)])  #visualize detection function + true peaks + perdicted peaks
     
@@ -360,12 +362,13 @@ def eval_beats(truth, preds):
     """
     Computes the average beat detection F-score.
     """
-    print(f"Beat evaluation")
-    print(f"truth: {truth}")
-    print(f"predictions: {preds}")
+    #print(f"Beat evaluation")
+    #print(f"truth: {truth}")
+    #print(f"predictions: {preds}")
+    
     return sum(mir_eval.beat.f_measure(np.asarray(truth[k]),
                                        np.asarray(preds[k]),
-                                       0.07)[0]
+                                       0.07)
                for k in truth if k in preds) / len(truth)
 
 
@@ -422,11 +425,13 @@ def predict_b(onsets, tempo):
     get predictions for beat
     """
     startup_period = len(onsets)//10
-    timeout = 5
+    timeout = 3
+    max_misses = 20#len(onsets)//20 +2
+    max_number_agents = 1000
     correction_factor = 5
     tol_inner = 40./1000. # s = 40 ms
-    p_tol_pre = 0.2
-    p_tol_post= 0.4
+    p_tol_pre = 0.1
+    p_tol_post= 0.2
 
     # Initialization
     agents = []
@@ -436,19 +441,23 @@ def predict_b(onsets, tempo):
                 agent = beat_agent(beat_interval=60/t_i, 
                                 pred = e_j+60/t_i, 
                                 hist = [e_j], 
-                                score = salience_interval_based(60./t_i))
+                                score = float("inf"),
+                                ibi=[])
                 agents.append(agent)
     #print(f"Initialized {len(agents)} agents.")
+    if len(agents) ==0:
+        print(f"Tempi: {tempo}")
+        print(f"Onset len: {len(onsets)}")
 
     # Main loop
     for _, e_j in enumerate(onsets):
+        new_agents = []
+        to_be_deleted = []    
         for i, a_i in enumerate(agents):
-            new_agents = []
-            to_be_deleted = []
             if e_j - a_i.history[-1] > timeout:
                 to_be_deleted.append(i)
                 continue
-            if a_i.last_hit > timeout:
+            if a_i.misses > max_misses:
                 to_be_deleted.append(i)
                 continue
             else:
@@ -456,39 +465,65 @@ def predict_b(onsets, tempo):
                 tol_pre = a_i.beatInterval*p_tol_pre
 
                 while a_i.prediction + tol_post < e_j:
-                    a_i.history.append(a_i.prediction)
+                    if not(a_i.prediction+a_i.beatInterval+tol_pre <= e_j and e_j <= a_i.prediction+a_i.beatInterval+tol_post):
+                        a_i.history.append(a_i.prediction)
                     a_i.prediction += a_i.beatInterval
+                    a_i.misses +=1
 
                 if a_i.prediction+tol_pre <= e_j and e_j <= a_i.prediction+tol_post:
                     error = e_j - a_i.prediction
-                    err_rel = error/a_i.beatInterval
+                    #err_rel = error/a_i.beatInterval
                     
                     if abs(a_i.prediction - e_j) > tol_inner: 
                         # if prediction is within outer but out of inner tolerance 
                         # --> create new agent based on prediction value (not actual event)
                         new_a_i = a_i.copy()
-                        new_agents.append(new_a_i)
                         # without updating beat_interval
                         new_a_i.prediction = a_i.prediction + new_a_i.beatInterval
                         new_a_i.history.append(a_i.prediction)
-                        new_a_i.score = (1-err_rel/2)*salience_gaussian(e_j, new_a_i.history[-1])
+                        #new_a_i.score = (1-err_rel/2)*salience_gaussian(e_j, new_a_i.history[-1])
+                        new_a_i.ibi.append(a_i.beatInterval)
+                        new_a_i.score=salience_variance(new_a_i.ibi)
+                        #new_a_i.score=score_agent(new_a_i)
                         new_a_i.misses += 1
+                        new_agents.append(new_a_i)
                         
+                    
+                    #if error/correction_factor < a_i.beatInterval:
                     a_i.beatInterval -= error/correction_factor #with updating beat interval
+                    #if a_i.beatInterval <= 0:
+                    #    a_i.beatInterval = 1
                     a_i.prediction = e_j + a_i.beatInterval
                     a_i.history.append(e_j)
-                    a_i.score = (1-err_rel/2)*salience_gaussian(e_j, a_i.history[-1])
-        agents+=new_agents
+                    a_i.ibi.append(a_i.beatInterval)
+                    #a_i.score = (1-err_rel/2)*salience_gaussian(e_j, a_i.history[-1])
+                    a_i.score = salience_variance(a_i.ibi)
+                    #a_i.score = score_agent(a_i)
+        #print(f"Number agents: {len(agents)}")
+        #if len(to_be_deleted)>0:
+        #    print(f"to be del: {len(to_be_deleted)}")
         if len(to_be_deleted)>0 and len(agents) > len(to_be_deleted):
             #print(f"Deleted {len(to_be_deleted)} timeouts in {len(agents)} agents.")
             agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
+        agents+=new_agents
         agents = remove_duplicate_agents(agents)
-
+        if len(agents)>max_number_agents: #too many agents, do a reset
+            print(f"Agent reset")
+            agents = [choose_best_agent(agents)]
+        
+    print(f"Choose best agent from {len(agents)} candidates")
     best_agent = choose_best_agent(agents)
 
-
     #print(f"Beats: {best_agent.history}")
-    return best_agent.history
+
+    #for i in range(1, len(best_agent.history)):
+    #    if best_agent.history[i] <= best_agent.history[i-1]:
+    #        print(best_agent.history)
+    #        raise(NotImplementedError())
+    predicted_beats = best_agent.history
+    #predicted_beats = np.round(np.array(predicted_beats), decimals=5)
+    #predicted_beats = np.sort(np.unique(predicted_beats))
+    return predicted_beats
     
 
 
@@ -610,19 +645,28 @@ def salience_interval_based(interval, window=0.05):
 def salience_gaussian(onset, expected_time, std=0.05):
     return np.exp(-((onset - expected_time) ** 2) / (2 * std ** 2))
 
+def salience_variance(ibi):
+    # an agent is the better, the more invariant the beats are
+    return 1-np.var(ibi)
+
+def score_agent(agent):
+    # TODO
+    score=None
+    return score
 
 
 class beat_agent():
-    def __init__(self, beat_interval, pred, hist, score, misses=0):
+    def __init__(self, beat_interval, pred, hist, score, ibi, misses=0):
         self.beatInterval = beat_interval
         self.prediction = pred
         self.history = hist
         self.score = score
         self.misses = misses
+        self.ibi = ibi
         #print(f"beat interval is {beat_interval}")
     
     def copy(self):
-        return beat_agent(self.beatInterval.copy(), self.prediction.copy(), self.history.copy(), self.score.copy(), self.misses)
+        return beat_agent(self.beatInterval.copy(), self.prediction.copy(), self.history.copy(), self.score, self.ibi.copy(), self.misses)
 
 
 class IOICluster():
@@ -734,36 +778,44 @@ def choose_best_agent(agents):
     best_agent = agents[0]
     best_score = best_agent.score
     i = 0
-    best_ind = 0
+    #best_ind = 0
     for agent in agents[1:]:
         if agent.score > best_score:
             best_agent = agent
             best_score = best_agent.score
-            best_ind=i
+            #best_ind=i
         i+=1
     #print(f"The best agent is agent {best_ind}.")
 
     return best_agent
 
-def remove_duplicate_agents(agents, view=5):
+def remove_duplicate_agents(agents, view=1, eps=0.0001):
     if len(agents)<2:
         return agents
     
     to_be_deleted = []
     for i, agent1 in enumerate(agents):
         for j, agent2 in zip(range(i+1, len(agents)), agents[i+1:]):
-            if agent1.beatInterval==agent2.beatInterval and agent1.prediction==agent2.prediction and agent1.history[-view:]==agent2.history[-view:]:# and agent1.score==agent2.score:
+            if abs(agent1.beatInterval-agent2.beatInterval)<eps and (agent1.prediction-agent2.prediction)<eps and (agent1.history[-1]-agent2.history[-1])<eps:# and agent1.score==agent2.score:
+                """
                 if len(agent1.history) >= len(agent2.history):
                     to_be_deleted.append(j) # keep the agent with the longer history
                 else:
                     to_be_deleted.append(i)
-                """
+                
                 if agent1.score >= agent2.score:
                     to_be_deleted.append(j) # keep the agent with the higher score
                 else:
                     to_be_deleted.append(i)
                 """
-    agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
+                to_be_deleted.append(j)
+    if len(to_be_deleted) < len(agents):
+        agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
+    else: 
+        agents = [agents[0]]
+    #    agents = [choose_best_agent(agents)]
+    #if len(agents)==0:
+    #    print("No agents left")
     #if len(to_be_deleted)>0:
         #print(f"Deleted {len(to_be_deleted)} duplicates")
     return agents

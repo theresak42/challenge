@@ -36,5 +36,35 @@ Tempo
         #learned_autocorrelation+flux_autocorrelation p-value:0.6768503937007878
 
 Beats
-    Multi-agent approach
+    Multi-agent approach --> scoring function weak
         0.3184081995350585
+        0.34 (after correction)
+
+    CNN Baseline (epochs=0)
+        0.31546630601036335
+    CNN 1
+        0.5948875384887525
+        # num_epochs = 10
+        # loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor([100.0]).to(device))
+        # score = eval_o(model_path, beats_dataset, model_class=CNN_model2, odf_rate=fps, sr=sr, hoplength=hop, threshold=0.2, type_="beats")
+        # without extra training data
+    CNN 2
+        0.6714160937053629
+        # 15 epochs
+        # weight 25
+        # threshold 0.5
+        # with extra training data
+    CNN 3
+        0.6850935676402993
+        # 15 epochs
+        # weight 35
+        # threshold 0.5
+        # add extra training data
+
+    Multi-agent 1
+        # 0.38208771527252594
+        # scoring: 1-variance(inter-beat-intervals)
+        # include beats of not near onset
+    Multi-agent 2
+        # 0.3568790190795902
+        # scoring: score_agent
