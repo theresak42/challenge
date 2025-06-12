@@ -11,8 +11,8 @@ def main(indir):
     data_split = 0.8
     fps =70
 
-    data, labels, sr, hop = load_data(indir, methode="beats", train=True, use_extra=False)
-    #beats_dataset = AudioDataset(data, labels)
+    data, labels, sr, hop = load_data(indir, methode="beats", train=True, use_extra=True)
+    beats_dataset = AudioDataset(data, labels)
 
     
     # calculate 0-1 ratio
@@ -30,7 +30,7 @@ def main(indir):
     """
     
     # multi-agent beat detection
-    
+    """
     len_data = int(len(data)*data_split)
     complete_dataset = AudioDataset(data, labels)
     train_dataset = AudioDataset(data[:len_data], labels[:len_data])
@@ -51,8 +51,10 @@ def main(indir):
     print(f"Run successfull.")
     print(f"b_score = {b_score}")
     return
-    # after disabling this part, you need to enable the correct preprocess_labels else-branch again
-    
+    # after disabling this part, you need to enable the correct preprocess_labels else-branch in data.py 
+    """
+
+
     print("Data loaded")
     len_data = int(len(data)*data_split)
     train_dataset = AudioDataset(data[:len_data], labels[:len_data])
@@ -69,16 +71,16 @@ def main(indir):
 
     model = CNN_model2().to(device)
 
-    num_epochs = 15
+    num_epochs = 20
 
     optimizer = AdamW(model.parameters(), lr = 0.0001)
 
-    loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor([35.0]).to(device))
+    loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor([30.0]).to(device))
 
 
-    #train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device, save_model=True, model_name="beats_cnn3")
+    train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device, save_model=True, model_name="beats_cnn4")
 
-    model_path = os.getcwd()+r"\trained_models\beats_cnn2.pt"
+    model_path = os.getcwd()+r"\trained_models\beats_cnn4.pt"
     score = eval_o(model_path, beats_dataset, model_class=CNN_model2, odf_rate=fps, sr=sr, hoplength=hop, threshold=0.4, type_="beats")
     print(score)
     

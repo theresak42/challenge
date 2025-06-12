@@ -60,6 +60,12 @@ Beats
         # weight 35
         # threshold 0.5
         # add extra training data
+    CNN 4
+        0.6850935676402993
+        # 20 epochs
+        # weight 30
+        # threshold 0.5
+        # add extra training data
 
     Multi-agent 1
         # 0.38208771527252594

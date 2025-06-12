@@ -81,7 +81,7 @@ def preprocess_labels(filename, methode, melspec=None, sr=None, hoplength=None):
     elif methode == "tempo":
         with open(filename, "r") as f:
             final_labels = list(map(float, f.readline().replace("\n","").split("\t")))
-        """
+        
     elif methode == "beats":
         labels = []
         with open(filename, "r") as f:
@@ -105,9 +105,9 @@ def preprocess_labels(filename, methode, melspec=None, sr=None, hoplength=None):
                 except:
                     print(line.replace("\n","").split("\t")[0])
                 final_labels += values
-    
+        """
     return final_labels
-
+        
 
 
 def load_data(indir, methode = "onsets", train=True, use_extra = True, fps=70):
