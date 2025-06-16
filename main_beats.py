@@ -89,19 +89,12 @@ def main(indir):
     loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor([35.0]).to(device))
 
 
-    #train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device, save_model=True, model_name="beats_cnn3.1")
+    #train(model, train_dataloader, val_dataloader, optimizer, loss_fn, num_epochs, device=device, save_model=True, model_name="beats_cnn6")
 
-    model_path = os.getcwd()+r"\trained_models\beats_cnn3.pt"
-    score = eval_o(model_path, beats_dataset, model_class=CNN_model2, odf_rate=fps, sr=sr, hoplength=hop, threshold=0.5, type_="beats")
-    print(score)
-    
     model_path = os.getcwd()+r"\trained_models\beats_cnn5.pt"
     score = eval_o(model_path, beats_dataset, model_class=CNN_model2, odf_rate=fps, sr=sr, hoplength=hop, threshold=0.5, type_="beats")
     print(score)
-    #score = eval_o(model_path, beats_dataset, model_class=CNN_model2, odf_rate=fps, sr=sr, hoplength=hop, threshold=0.6, type_="beats")
-    #print(score)
     
-
     #get predictions
     
     #test_data, sr, hoplength = load_data(indir, train=False, fps=fps)
