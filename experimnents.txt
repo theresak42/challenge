@@ -55,17 +55,25 @@ Beats
         # threshold 0.5
         # with extra training data
     CNN 3
-        0.6850935676402993
-        # 15 epochs
+        0.6780535234946411 on extra data
+        #0.6850935676402993
+        # 20 epochs, best result after 12
         # weight 35
         # threshold 0.5
         # add extra training data
     CNN 4
-        0.6850935676402993
+        0.648
+        # 5 epochs
+        # weight 30
+        # threshold 0.4
+        # add extra training data
+    CNN 5
+        0.6810927147600024
         # 20 epochs
         # weight 30
-        # threshold 0.5
+        # threshold 0.4
         # add extra training data
+
 
     Multi-agent 1
         # 0.38208771527252594
@@ -74,3 +82,10 @@ Beats
     Multi-agent 2
         # 0.3568790190795902
         # scoring: score_agent
+    Multi-agent 3
+        # b_score = 0.39295952855131966
+        # scoring: overlap to onsets
+        # no more branching
+    Multi-agent 4
+        # 0.45944053007722585
+        # scoring: overlap to CNN predicted beats

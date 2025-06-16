@@ -43,7 +43,7 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs, save_mod
 
         print(f'Epoch {epoch + 1}: {epoch_loss / len(train_loader):.8f}')
 
-        if (epoch + 1) % 5 == 0: #or epoch <5: # TODO: remove
+        if (epoch + 1) % 1 == 0: #or epoch <5: # TODO: remove
             eval_loss = evaluate(model, test_loader, loss_fn, device=device)
             if save_model and eval_loss<best_loss:
                 best_loss = eval_loss

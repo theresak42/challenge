@@ -75,7 +75,7 @@ def vis_beats(true_onsets, pred_onsets, true_beats, pred_beats, title="Onsets an
     fig = go.Figure()
 
     # True Onsets
-    if true_onsets:
+    if true_onsets is not None:
         for t in true_onsets:
             fig.add_trace(go.Scatter(
                 x=[t, t],
@@ -89,41 +89,44 @@ def vis_beats(true_onsets, pred_onsets, true_beats, pred_beats, title="Onsets an
         #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="True Onset", line=dict(color="green", dash="solid")))
 
     # Predicted Onsets
-    for t in pred_onsets:
-        fig.add_trace(go.Scatter(
-            x=[t, t],
-            y=[0, 1],
-            mode="lines",
-            name="Predicted Onset",
-            line=dict(color="red", dash="dash"),
-            showlegend=False
-        ))
+    if pred_onsets is not None:
+        for t in pred_onsets:
+            fig.add_trace(go.Scatter(
+                x=[t, t],
+                y=[0, 1],
+                mode="lines",
+                name="Predicted Onset",
+                line=dict(color="red", dash="dash"),
+                showlegend=False
+            ))
     #if pred_onsets:
     #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="Predicted Onset", line=dict(color="red", dash="dash")))
 
     # True Beats
-    for t in true_beats:
-        fig.add_trace(go.Scatter(
-            x=[t, t],
-            y=[0, 1],
-            mode="lines",
-            name="True Beat",
-            line=dict(color="blue", dash="solid"),
-            showlegend=False
-        ))
+    if true_beats is not None:
+        for t in true_beats:
+            fig.add_trace(go.Scatter(
+                x=[t, t],
+                y=[0, 1],
+                mode="lines",
+                name="True Beat",
+                line=dict(color="blue", dash="solid"),
+                showlegend=False
+            ))
     #if true_beats:
     #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="True Beat", line=dict(color="blue", dash="solid")))
 
     # Predicted Beats
-    for t in pred_beats:
-        fig.add_trace(go.Scatter(
-            x=[t, t],
-            y=[0, 1],
-            mode="lines",
-            name="Predicted Beat",
-            line=dict(color="orange", dash="dash"),
-            showlegend=False
-        ))
+    if pred_beats is not None:
+        for t in pred_beats:
+            fig.add_trace(go.Scatter(
+                x=[t, t],
+                y=[0, 1],
+                mode="lines",
+                name="Predicted Beat",
+                line=dict(color="orange", dash="dash"),
+                showlegend=False
+            ))
     #if pred_beats:
     #    fig.add_trace(go.Scatter(x=[None], y=[None], mode="lines", name="Predicted Beat", line=dict(color="orange", dash="dash")))
 
@@ -169,6 +172,12 @@ def eval_o(model_path, dataset,model_class, odf_rate, sr, hoplength, threshold=0
                 #dividing by odf_rate gives the timesteps
                 strongest_indices = custom_detect_peaks2(pred, threshold=threshold)/ odf_rate
 
+                #if type_ == "beats":
+                    #print(strongest_indices)
+                    #strongest_indices = multi_agent_post(strongest_indices)
+                    #pass
+                    
+
                 #get times of labels
                 frame_indices = np.where(labels == 1)[0]
                 label_times = librosa.frames_to_time(frame_indices, sr=sr, hop_length=hoplength)
@@ -177,11 +186,12 @@ def eval_o(model_path, dataset,model_class, odf_rate, sr, hoplength, threshold=0
                 all_true[i] = label_times
                 #if len(label_times) < 2:
                 #    print(f"Sample {i}, truths: {label_times}")
-
                 #print(f"Sample {i} predicts {len(all_pred[i])} beats: {all_pred[i][:10]}")
-                #vis_onsets([pred], [labels])                       #visualize detection function + true peaks
+                #vis_onsets([strongest_indices], [labels])                       #visualize detection function + true peaks
                 #vis_onsets([pred], [labels], [librosa.time_to_frames(strongest_indices, sr=sr, hop_length=hoplength)])  #visualize detection function + true peaks + perdicted peaks
-    
+                #vis_beats(None, None, label_times, strongest_indices)
+                #input()
+
     #return f1-score
     if type_ == "beats":
         return eval_beats(all_true, all_pred)
@@ -255,7 +265,7 @@ def eval_t(model_path, dataset,modelclass):
 
     return eval_tempo(all_true, all_pred)
 
-def eval_b(dataset, onsets_all, tempo_all):
+def eval_b(dataset, onsets_all, tempo_all, beats_all=None):
     """
     compute beats estimates
     """
@@ -267,8 +277,12 @@ def eval_b(dataset, onsets_all, tempo_all):
         data, labels = dataset[i]
         onsets = onsets_all[i]
         tempo = tempo_all[i]
+
+        beats=None
+        if beats_all is not None:
+            beats = beats_all[i]
         
-        all_pred[i] = predict_b(onsets, tempo)
+        all_pred[i] = predict_b3(onsets, tempo, beats)
         all_true[i] = labels
 
         #vis_beats(true_onsets=None, pred_onsets=onsets, true_beats=labels, pred_beats=all_pred[i])
@@ -419,6 +433,29 @@ def predict_t(model_path, dataset,model_class, outfile):
     with open(outfile, 'w') as f:
         json.dump(all_pred, f)
 
+def predict_b2(model_path, dataset,model_class, odf_rate, outfile, threshold=0.5):
+    """
+    get the predictions for the challenge server
+    """
+    #load model
+    model = model_class()
+    model.load_state_dict(torch.load(model_path, weights_only=True))
+    model.eval()
+
+    all_pred = defaultdict()
+
+    with torch.no_grad():
+        for i in range(len(dataset)):
+                data, filename = dataset[i]
+                data = torch.tensor(data).unsqueeze(0).unsqueeze(1).float()
+                pred = model(data).numpy()[0]
+
+                strongest_indices = custom_detect_peaks2(pred, threshold=threshold)/ odf_rate
+
+                all_pred[str(os.path.splitext(os.path.basename(filename))[0])] = {'beats': list(np.round(strongest_indices, 3))}
+    with open(outfile, 'w') as f:
+        json.dump(all_pred, f)
+
 
 def predict_b(onsets, tempo):
     """
@@ -526,7 +563,114 @@ def predict_b(onsets, tempo):
     return predicted_beats
     
 
+def predict_b3(onsets, tempo, beat_candidates=None):
+    """
+    get predictions for beat
+    """
+    startup_period = len(onsets)//10
+    timeout = 3
+    max_misses = 20#len(onsets)//20 +2
+    max_number_agents = 1000
+    correction_factor = 2
+    tol_inner = 40./1000. # s = 40 ms
+    p_tol_pre = 0.2
+    p_tol_post= 0.2
 
+    if beat_candidates is None:
+        print("Use onsets as candidates")
+        beat_candidates = onsets
+
+    # Initialization
+    agents = []
+    for t_i in tempo:
+        for e_j in onsets[:startup_period]:
+            agent = beat_agent(beat_interval=60.0/t_i, 
+                            pred = e_j+60.0/t_i, 
+                            hist = [e_j], 
+                            score = float("-inf"),
+                            ibi=[])
+            agents.append(agent)
+    #print(f"Initialized {len(agents)} agents.")
+
+    # assert there are agents
+    if len(agents) ==0:
+        print(f"Tempi: {tempo}")
+        print(f"Onset len: {len(onsets)}")
+
+    # Main loop
+    for _, e_j in enumerate(onsets):
+        new_agents = []
+        #to_be_deleted = []    
+        for i, a_i in enumerate(agents):
+            #if e_j - a_i.history[-1] > timeout:
+                #to_be_deleted.append(i)
+                #continue
+            #    pass
+            #if a_i.misses > max_misses:
+                #to_be_deleted.append(i)
+                #continue
+            #    pass
+            #else:
+            tol_post = a_i.beatInterval*p_tol_post
+            tol_pre = a_i.beatInterval*p_tol_pre
+
+            while a_i.prediction + tol_post < e_j:
+                if not(a_i.prediction+a_i.beatInterval+tol_pre <= e_j and e_j <= a_i.prediction+a_i.beatInterval+tol_post):
+                    a_i.history.append(a_i.prediction)
+                a_i.prediction += a_i.beatInterval
+                a_i.misses +=1
+                a_i.score = overlap_score(beat_candidates, a_i.history)
+
+            if a_i.prediction+tol_pre <= e_j and e_j <= a_i.prediction+tol_post:
+                error = e_j - a_i.prediction
+                #err_rel = error/a_i.beatInterval
+                
+                if abs(a_i.prediction - e_j) > tol_inner: 
+                    # if prediction is within outer but out of inner tolerance 
+                    # --> create new agent based on prediction value (not actual event)
+                    new_a_i = a_i.copy()
+                    # without updating beat_interval
+                    new_a_i.prediction = a_i.prediction + new_a_i.beatInterval
+                    new_a_i.history.append(a_i.prediction)
+                    new_a_i.ibi.append(a_i.beatInterval)
+                    #new_a_i.score=salience_variance(new_a_i.ibi)
+                    new_a_i.score = overlap_score(beat_candidates, new_a_i.history)
+                    new_a_i.misses += 1
+                    new_agents.append(new_a_i)
+                 
+                if error > 0:
+                    print(f"adjusted {a_i.beatInterval} by {error/correction_factor}")
+                a_i.beatInterval -= error/correction_factor #with updating beat interval
+                a_i.prediction = e_j + a_i.beatInterval
+                a_i.history.append(e_j)
+                a_i.ibi.append(a_i.beatInterval)
+                #a_i.score = salience_variance(a_i.ibi)
+                a_i.score = overlap_score(beat_candidates, a_i.history)
+        #print(f"Number agents: {len(agents)}")
+        #if len(to_be_deleted)>0:
+        #    print(f"to be del: {len(to_be_deleted)}")
+        #if len(to_be_deleted)>0 and len(agents) > len(to_be_deleted):
+            #print(f"Deleted {len(to_be_deleted)} timeouts in {len(agents)} agents.")
+        #    agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
+        #agents+=new_agents
+        agents = remove_duplicate_agents(agents)
+        if len(agents)>max_number_agents: #too many agents, do a reset
+            print(f"Agent reset")
+            agents = [choose_best_agent(agents)]
+        
+    #print(f"Choose best agent from {len(agents)} candidates")
+    best_agent = choose_best_agent(agents, min_=False)
+
+    #print(f"Beats: {best_agent.history}")
+
+    #for i in range(1, len(best_agent.history)):
+    #    if best_agent.history[i] <= best_agent.history[i-1]:
+    #        print(best_agent.history)
+    #        raise(NotImplementedError())
+    predicted_beats = best_agent.history
+    #predicted_beats = np.round(np.array(predicted_beats), decimals=5)
+    #predicted_beats = np.sort(np.unique(predicted_beats))
+    return predicted_beats
 
 def get_onsets(model_path, dataset, model_class, odf_rate, sr, hoplength, threshold=0.5, device=torch.device('cpu')):
     """
@@ -580,6 +724,13 @@ def get_tempo(model_path, dataset,modelclass):
         for i in range(len(dataset)):
             #get detection function
             data, labels = dataset[i]
+            
+            # test multiple-agent approach with perfect tempo hypothesis
+            #if len(labels)==3:
+            #    all_pred[i] = [labels[0] if labels[2]>=0.5 else labels[1]]
+            #else:
+            #    all_pred[i] = [labels[0]]
+            #continue
             tensor_data = torch.tensor(data).unsqueeze(0).unsqueeze(1).float()
             pred = model(tensor_data).numpy()[0]
 
@@ -666,7 +817,7 @@ class beat_agent():
         #print(f"beat interval is {beat_interval}")
     
     def copy(self):
-        return beat_agent(self.beatInterval.copy(), self.prediction.copy(), self.history.copy(), self.score, self.ibi.copy(), self.misses)
+        return beat_agent(self.beatInterval, self.prediction.copy(), self.history.copy(), self.score, self.ibi.copy(), self.misses)
 
 
 class IOICluster():
@@ -770,45 +921,56 @@ class IOICluster():
         return tempi
     
 
-def choose_best_agent(agents):
+def choose_best_agent(agents, min_=True):
     if len(agents) < 1:
         #print("No agents")
         return
-    
     best_agent = agents[0]
     best_score = best_agent.score
     i = 0
-    #best_ind = 0
-    for agent in agents[1:]:
-        if agent.score > best_score:
-            best_agent = agent
-            best_score = best_agent.score
-            #best_ind=i
-        i+=1
-    #print(f"The best agent is agent {best_ind}.")
+    best_ind = 0
+    
+    if min_:
+        for agent in agents[1:]:
+            if agent.score < best_score:
+                best_agent = agent
+                best_score = best_agent.score
+                #best_ind=i
+            i+=1
+    else:
+        for agent in agents[1:]:
+            #print(f"Agent {i} has score {agent.score}")
+            if agent.score > best_score:
+                best_agent = agent
+                best_score = best_agent.score
+                best_ind=i
+            i+=1
+    print(f"The best agent is agent {best_ind} with score {best_score}.")
 
     return best_agent
 
-def remove_duplicate_agents(agents, view=1, eps=0.0001):
+def remove_duplicate_agents(agents, view=1, eps=0.00001):
     if len(agents)<2:
         return agents
     
     to_be_deleted = []
     for i, agent1 in enumerate(agents):
         for j, agent2 in zip(range(i+1, len(agents)), agents[i+1:]):
+            if i in to_be_deleted or j in to_be_deleted:
+                continue
             if abs(agent1.beatInterval-agent2.beatInterval)<eps and (agent1.prediction-agent2.prediction)<eps and (agent1.history[-1]-agent2.history[-1])<eps:# and agent1.score==agent2.score:
                 """
                 if len(agent1.history) >= len(agent2.history):
                     to_be_deleted.append(j) # keep the agent with the longer history
                 else:
                     to_be_deleted.append(i)
-                
+                """
                 if agent1.score >= agent2.score:
                     to_be_deleted.append(j) # keep the agent with the higher score
                 else:
                     to_be_deleted.append(i)
-                """
-                to_be_deleted.append(j)
+                
+                #to_be_deleted.append(j)
     if len(to_be_deleted) < len(agents):
         agents = [agent for i, agent in enumerate(agents) if i not in to_be_deleted]
     else: 
@@ -816,7 +978,135 @@ def remove_duplicate_agents(agents, view=1, eps=0.0001):
     #    agents = [choose_best_agent(agents)]
     #if len(agents)==0:
     #    print("No agents left")
-    #if len(to_be_deleted)>0:
-        #print(f"Deleted {len(to_be_deleted)} duplicates")
+    if len(to_be_deleted)>0:
+        print(f"Deleted {len(to_be_deleted)} duplicates")
     return agents
 
+def beats_postprocessing(indices, eps=0.001):
+    ibis = np.diff(indices)
+    m = np.median(ibis)
+    #print(m)
+    tempo = 1/m*60
+
+    while tempo < 60:
+        tempo *=2
+        m/=2
+    while tempo > 200:
+        tempo /= 2
+        m*=2
+    
+    print(f"tempo = {tempo}")
+    
+    add_values = []
+    remove_indices = []
+
+    for i, ibi in enumerate(ibis[:-1]):
+        if abs(ibi-2*m) < eps: # 1 missing beat
+            add_values.append(indices[i]+ibi/2)
+        
+        if abs(ibi-3*m) < eps: # 2 missing beats
+            add_values.append(indices[i]+ibi/3)
+            add_values.append(indices[i]+2/3*ibi)
+        
+        if abs(ibi+ibis[i+1]-m) < eps: # too many beats
+            add_values.append(indices[i]+ibi/2)
+            remove_indices.append(i+1)
+
+    processed_indices = [idx for i, idx in enumerate(indices) if i not in remove_indices]
+    processed_indices += add_values
+    #print(f"added {len(add_values)}, removed {len(remove_indices)}")
+    #input()
+    return np.sort(processed_indices)
+
+
+def topk(data, k=4):
+    uniques, counts = np.unique(np.round(np.diff(data), decimals=6), return_counts=True)
+    topk_idx = np.argsort(counts)[::-1][:k]
+    topk = uniques[topk_idx]
+    return topk
+
+def similarity_score(a, b):
+    a = np.asarray(a)
+    b = np.asarray(b)
+    
+    # Pad the shorter array with zeros to match lengths
+    if len(a) < len(b):
+        a = np.pad(a, (0, len(b) - len(a)), 'constant')
+    elif len(b) < len(a):
+        b = np.pad(b, (0, len(a) - len(b)), 'constant')
+    
+    # Normalize the arrays
+    if np.std(a) == 0 or np.std(b) == 0:
+        return 0.0  # avoid division by zero if one array is constant
+
+    a_norm = (a - np.mean(a)) / np.std(a)
+    b_norm = (b - np.mean(b)) / np.std(b)
+    
+    # Compute cosine similarity (dot product of normalized vectors)
+    similarity = np.dot(a_norm, b_norm) / len(a)
+    
+    # Scale from [-1, 1] to [0, 1]
+    score = (similarity + 1) / 2
+    return score
+
+def overlap_score(candidates, history, decimals=3):
+    cop1 = np.round(candidates.copy(), decimals=decimals)
+    cop2 = np.round(history.copy(), decimals=decimals)
+    return len(np.intersect1d(cop1, cop2))
+    
+
+def multi_agent_post(candidates):
+    """
+    get predictions for beat
+    """
+    startup_period = min(max(len(candidates)//3, 3), 10)
+    lb = 20
+    ub = 150
+    
+    # Get interval hypotheses
+    intervals = topk(candidates, k=7) # interval hypotheses
+    tempo = [60/i for i in intervals]
+    for i, temp in enumerate(tempo):
+        while tempo[i] > ub:
+            tempo[i] = tempo[i]/2
+        if temp < lb:
+            tempo[i] = temp*2
+        if tempo[i] >= 60:
+            tempo.append(tempo[i]/2)
+    if len(tempo)==0:
+        tempo = [120]
+    #print(f"Tempo Hypotheses: {tempo}")
+
+    # Initialization
+
+    agents = []
+    for t_i in tempo:
+        if t_i > 0:
+            for e_j in candidates[:startup_period]:
+                agent = beat_agent(beat_interval=60/t_i, 
+                                pred = e_j+60/t_i, 
+                                hist = [e_j], 
+                                score = 0,
+                                ibi=[])
+                agents.append(agent)
+    #print(f"Initialized {len(agents)} agents.")
+    if len(agents) ==0:
+        print(f"Tempi: {tempo}")
+        print(f"Onset len: {len(candidates)}")
+
+    # Main loop
+    
+    for i, a_i in enumerate(agents):
+        while a_i.history[-1]<candidates[-1]:
+            a_i.history.append(a_i.prediction)
+            a_i.prediction += a_i.beatInterval
+            a_i.score = overlap_score(candidates, a_i.history)
+        
+    #print(f"Choose best agent from {len(agents)} candidates")
+    best_agent = choose_best_agent(agents, min_=False)
+
+    #print(f"Beats: {best_agent.history}")
+    predicted_beats = best_agent.history
+    #predicted_beats = np.round(np.array(predicted_beats), decimals=5)
+    #predicted_beats = np.sort(np.unique(predicted_beats))
+    return predicted_beats

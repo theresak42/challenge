@@ -95,8 +95,8 @@ def preprocess_labels(filename, methode, melspec=None, sr=None, hoplength=None):
         for label in labels:
             index = np.argmin(np.abs(frame_times-label))
             final_labels[index] = 1.0
-        """
-    elif methode == "beats":
+        
+    elif methode == "beats1":
         final_labels = []
         with open(filename, "r") as f:
             for line in f.readlines():
@@ -105,7 +105,7 @@ def preprocess_labels(filename, methode, melspec=None, sr=None, hoplength=None):
                 except:
                     print(line.replace("\n","").split("\t")[0])
                 final_labels += values
-        """
+        
     return final_labels
         
 
@@ -124,6 +124,9 @@ def load_data(indir, methode = "onsets", train=True, use_extra = True, fps=70):
                 suffix = ".onsets.gt"
                 extra_dir = "train_extra_onsets"
             case "beats":
+                suffix = ".beats.gt"
+                extra_dir = "train_extra_tempobeats"
+            case "beats1":
                 suffix = ".beats.gt"
                 extra_dir = "train_extra_tempobeats"
             case "tempo":
@@ -153,6 +156,8 @@ def load_data(indir, methode = "onsets", train=True, use_extra = True, fps=70):
             elif methode == "tempo":
                 pre_labels = preprocess_labels(label_filename, methode)
             elif methode == "beats":
+                pre_labels = preprocess_labels(label_filename, methode, melspec, sr, hoplength)
+            elif methode == "beats1":
                 pre_labels = preprocess_labels(label_filename, methode, melspec, sr, hoplength)
                     
             labels.append(pre_labels)
